@@ -29,29 +29,21 @@ class VideoAsciiPlayer {
     this.ctx = ctx;
   }
 
+  setStep(n: number) {
+    this.step = Math.max(1, Math.floor(n));
+  }
+
   async loadVideo(src: string): Promise<HTMLVideoElement> {
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
       video.muted = true;
       video.loop = true;
       video.playsInline = true;
-      
-      // 根據 src 類型決定是否需要 crossOrigin
       if (!src.startsWith('data:') && !src.startsWith('blob:')) {
         video.crossOrigin = 'anonymous';
       }
-      
-      video.onloadedmetadata = () => {
-        console.log('Video loaded:', video.videoWidth, 'x', video.videoHeight);
-        resolve(video);
-      };
-      
-      video.onerror = (err) => {
-        console.error('Video error:', err);
-        reject(new Error('影片載入失敗，請確認格式是否支援 (建議: MP4, WebM)'));
-      };
-      
-      // 設定 src 要在事件監聽器之後
+      video.onloadedmetadata = () => resolve(video);
+      video.onerror = () => reject(new Error('影片載入失敗'));
       video.src = src;
       video.load();
     });
@@ -66,16 +58,9 @@ class VideoAsciiPlayer {
   async loadImage(src: string): Promise<HTMLImageElement> {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      // 根據 src 類型決定是否需要 crossOrigin
-      if (!src.startsWith('data:') && !src.startsWith('blob:')) {
-        img.crossOrigin = 'anonymous';
-      }
-      img.onload = () => {
-        resolve(img);
-      };
-      img.onerror = (err) => {
-        reject(new Error('圖片載入失敗'));
-      };
+      if (!src.startsWith('data:') && !src.startsWith('blob:')) img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('圖片載入失敗'));
       img.src = src;
     });
   }
@@ -96,10 +81,7 @@ class VideoAsciiPlayer {
   }
 
   play(onFrame?: (frame: string[][]) => void) {
-    if (!this.currentVideo) {
-      throw new Error('No video loaded. Call setVideo() first.');
-    }
-    
+    if (!this.currentVideo) throw new Error('No video loaded. Call setVideo() first.');
     this.onFrameCallback = onFrame || null;
     this.currentVideo.play();
     this.startRendering();
@@ -122,9 +104,7 @@ class VideoAsciiPlayer {
     const render = () => {
       if (this.currentVideo && !this.currentVideo.paused) {
         this.updateAsciiData();
-        if (this.onFrameCallback) {
-          this.onFrameCallback(this.data);
-        }
+        if (this.onFrameCallback) this.onFrameCallback(this.data);
         this.animationFrameId = requestAnimationFrame(render);
       }
     };
@@ -214,6 +194,9 @@ export default function VideoAsciiDemo() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [step, setStep] = useState(3);
+  const [useTargetCols, setUseTargetCols] = useState(false);
+  const [targetCols, setTargetCols] = useState(80);
+  const [computedStepFromCols, setComputedStepFromCols] = useState<number | null>(null);
   const [chars, setChars] = useState('@%#*+=-:. ');
   const playerRef = useRef<VideoAsciiPlayer | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -229,6 +212,43 @@ export default function VideoAsciiDemo() {
       playerRef.current?.destroy();
     };
   }, []);
+
+  useEffect(() => {
+    if (!useTargetCols) {
+      setComputedStepFromCols(null);
+      return;
+    }
+    const player = playerRef.current;
+    if (!player) return;
+
+    let imgW = 0;
+    const v = (player as any).getVideo ? (player as any).getVideo() : null;
+    if (v && v.videoWidth) imgW = v.videoWidth;
+    else if ((player as any).getCanvas) {
+      const c = (player as any).getCanvas();
+      if (c) imgW = c.width;
+    }
+    if (!imgW) return;
+
+    const newStep = Math.max(1, Math.round(imgW / Math.max(1, targetCols)));
+    setComputedStepFromCols(newStep);
+    setStep(newStep);
+    if ((player as any).setStep) (player as any).setStep(newStep);
+
+    // reprocess immediate frame
+    if ((player as any).processImage) {
+      try {
+        (player as any).processImage();
+        const f = (player as any).getAsciiFrame();
+        if (f) setAsciiFrame(f);
+      } catch (e) {}
+    } else if ((player as any).getAsciiFrame) {
+      try {
+        const f = (player as any).getAsciiFrame();
+        if (f) setAsciiFrame(f);
+      } catch (e) {}
+    }
+  }, [useTargetCols, targetCols, isLoading]);
 
   // 固定使用 scaleX = 2，不再自動計算
 
@@ -372,14 +392,14 @@ export default function VideoAsciiDemo() {
       const cW = Math.max(0, container.clientWidth - 8);
       const cH = Math.max(0, container.clientHeight - 8);
 
-      const pW = preEl.scrollWidth;
-      const pH = preEl.scrollHeight;
+      // compute visual size: account for pre's horizontal transform scaleX
+      const pW = (preEl.offsetWidth || preEl.clientWidth) * scaleX;
+      const pH = preEl.offsetHeight || preEl.clientHeight;
       if (!pW || !pH) {
         setFitScale(1);
         return;
       }
-
-      // 若都沒有超出，維持 1，不做縮放
+      // 若都沒有超出，維持 1，不做縮放（只要寬或高任一超過就縮放）
       if (pW <= cW && pH <= cH) {
         setFitScale(1);
         return;
@@ -443,6 +463,21 @@ export default function VideoAsciiDemo() {
                 disabled={isPlaying}
               />
               <span style={{ fontSize: 12, color: '#9ca3a8' }}>數字越小，細節越多（但較慢）</span>
+              <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <label style={{ color: '#9ca3a8' }}>以目標字寬計算:</label>
+                <input
+                  type="number"
+                  min={10}
+                  max={200}
+                  value={targetCols}
+                  onChange={(e) => setTargetCols(Number(e.target.value) || 0)}
+                  style={{ width: 80, padding: '4px 6px', borderRadius: 4 }}
+                />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="checkbox" checked={useTargetCols} onChange={(e) => setUseTargetCols(e.target.checked)} /> 使用
+                </label>
+                <div style={{ color: '#9ca3a8' }}>計算 step: {computedStepFromCols ?? '-'}</div>
+              </div>
             </div>
 
             <div>
