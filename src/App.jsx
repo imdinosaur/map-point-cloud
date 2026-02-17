@@ -211,7 +211,7 @@ function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#000' }}>
       <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', zIndex: 1, fontFamily: 'monospace' }}>
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }} >
+        <div style={{ display: 'none', gap: '8px', marginBottom: '8px' ,  }} >
           <button
             onClick={() => setPage('map')}
             style={{
@@ -315,7 +315,7 @@ function App() {
           <Scene colorMode={colorMode} isCircular={isCircular} sampling={sampling} boxSize={boxSize} />
         </Canvas>
       ) : (
-        <div style={{ width: '100vw', height: '100vh', display: 'none' }}>
+        <div style={{ width: '100vw', height: '100vh' }}>
           <VideoAsciiDemo />
         </div>
       )}
