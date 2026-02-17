@@ -211,7 +211,7 @@ function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#000' }}>
       <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', zIndex: 1, fontFamily: 'monospace' }}>
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }} >
           <button
             onClick={() => setPage('map')}
             style={{
@@ -226,7 +226,7 @@ function App() {
           >
             地圖
           </button>
-          <button
+          <button 
             onClick={() => setPage('video')}
             style={{
               padding: '6px 12px',
