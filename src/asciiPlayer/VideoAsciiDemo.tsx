@@ -250,39 +250,7 @@ export default function VideoAsciiDemo() {
     }
   }, [useTargetCols, targetCols, isLoading]);
 
-  // 固定使用 scaleX = 2，不再自動計算
 
-  const loadDemoVideo = async () => {
-    setIsLoading(true);
-    setError('');
-    
-    try {
-      const player = new VideoAsciiPlayer({ step, chars });
-      
-      // 使用更可靠的影片來源
-      const videoUrl = 'https://www.w3schools.com/html/mov_bbb.mp4';
-      
-      console.log('Loading video from:', videoUrl);
-      const video = await player.loadVideo(videoUrl);
-      
-      player.setVideo(video);
-      player.setInvert(invert);
-      playerRef.current?.destroy();
-      playerRef.current = player;
-      
-      player.play((frame) => {
-        setAsciiFrame(frame);
-        setIsPlaying(true);
-      });
-      
-      console.log('Video loaded successfully');
-    } catch (err) {
-      console.error('Load error:', err);
-      setError('載入影片失敗: ' + ((err as Error).message || '請檢查網路連線或嘗試上傳本地影片'));
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const loadCustomVideo = async (file: File) => {
     setIsLoading(true);
@@ -446,7 +414,7 @@ export default function VideoAsciiDemo() {
   return (
     <div style={{ minHeight: '100vh', background: '#000', color: '#39ff66', padding: '32px', fontFamily: 'monospace' }}>
       <div style={{ maxWidth: 960, margin: '0 auto' }}>
-        <h1 style={{ fontSize: 24, marginBottom: 16, textAlign: 'center' }}>🎬 Video ASCII Player 測試</h1>
+        <h1 style={{ fontSize: 24, marginBottom: 16, textAlign: 'center' }}>🎬 Video ASCII Player</h1>
 
         {/* 控制面板 */}
         <div style={{ background: '#0b0b0b', padding: 16, borderRadius: 8, marginBottom: 24, border: '1px solid #2f8f66' }}>
@@ -494,20 +462,13 @@ export default function VideoAsciiDemo() {
           </div>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <button
-              onClick={loadDemoVideo}
-              disabled={isLoading || isPlaying}
-              style={{ padding: '8px 12px', background: '#2f8f66', color: '#000', borderRadius: 6, cursor: 'pointer', opacity: isLoading || isPlaying ? 0.6 : 1 }}
-            >
-              {isLoading ? '載入中...' : '📺 載入示範影片'}
-            </button>
 
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isLoading || isPlaying}
               style={{ padding: '8px 12px', background: '#2563eb', color: '#fff', borderRadius: 6, cursor: 'pointer', opacity: isLoading || isPlaying ? 0.6 : 1 }}
             >
-              📁 上傳自訂影片
+              📁 上傳影片
             </button>
 
             <button
@@ -600,7 +561,6 @@ export default function VideoAsciiDemo() {
         <div style={{ marginTop: 16, textAlign: 'center', color: '#9ca3a8', fontSize: 13 }}>
           <p>解析度: {asciiFrame[0]?.length || 0} x {asciiFrame.length || 0} 字元</p>
           <p style={{ marginTop: 8 }}>💡 提示: 解析度調低 (step=1-2) 可看到更多細節，但會較慢</p>
-          <p style={{ marginTop: 6, fontSize: 12 }}>🐛 如果示範影片無法載入，請嘗試上傳本地 MP4 檔案</p>
         </div>
       </div>
     </div>

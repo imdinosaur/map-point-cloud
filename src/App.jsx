@@ -206,7 +206,7 @@ function App() {
   const [isCircular, setIsCircular] = useState(false)
   const [sampling, setSampling] = useState(1)
   const [boxSize, setBoxSize] = useState(0.6)
-  const [page, setPage] = useState('map') // 'map' or 'video'
+  const [page, setPage] = useState('video') // 'map' or 'video'
   
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#000' }}>
