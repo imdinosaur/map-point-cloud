@@ -3,7 +3,6 @@ import { OrbitControls, useTexture } from '@react-three/drei'
 import { useRef, useMemo, useEffect, useState } from 'react'
 import * as THREE from 'three'
 import './App.css'
-import VideoAsciiDemo from './asciiPlayer/VideoAsciiDemo'
 
 // 生成模擬的高度圖資料（實際使用時可以從圖片或API載入）
 function generateHeightMapData(width, height, isCircular = false, sampling = 1) {
@@ -206,119 +205,77 @@ function App() {
   const [isCircular, setIsCircular] = useState(false)
   const [sampling, setSampling] = useState(1)
   const [boxSize, setBoxSize] = useState(0.6)
-  const [page, setPage] = useState('video') // 'map' or 'video'
-  
+
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#000' }}>
       <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', zIndex: 1, fontFamily: 'monospace' }}>
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' ,  }} >
+        <h3>3D 地圖高度視覺化</h3>
+        <p>拖曳旋轉 | 滾輪縮放</p>
+        <div style={{ marginTop: '10px', display: 'flex', gap: '10px', flexDirection: 'column' }}>
           <button
-            onClick={() => setPage('map')}
+            onClick={() => setColorMode(colorMode === 'opacity' ? 'color' : 'opacity')}
             style={{
-              padding: '6px 12px',
-              background: page === 'map' ? '#ffffff' : '#00d9ff',
+              padding: '8px 16px',
+              background: '#00d9ff',
               border: 'none',
               borderRadius: '4px',
               color: '#000',
               cursor: 'pointer',
-              fontWeight: 'bold'
+              fontWeight: 'bold',
+              fontSize: '14px'
             }}
           >
-            地圖
+            {colorMode === 'opacity' ? '切換至漸層色' : '切換至透明度'}
           </button>
-          <button 
-            onClick={() => setPage('video')}
+          <button
+            onClick={() => setIsCircular(!isCircular)}
             style={{
-              padding: '6px 12px',
-              background: page === 'video' ? '#ffffff' : '#00d9ff',
+              padding: '8px 16px',
+              background: '#00d9ff',
               border: 'none',
               borderRadius: '4px',
               color: '#000',
               cursor: 'pointer',
-              fontWeight: 'bold'
+              fontWeight: 'bold',
+              fontSize: '14px'
             }}
           >
-            ASCII 影片
+            {isCircular ? '切換至方形' : '切換至圓形'}
           </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label style={{ fontSize: '14px' }}>稀疏度:</label>
+            <input
+              type="range"
+              min="1"
+              max="5"
+              value={sampling}
+              onChange={(e) => setSampling(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span style={{ fontSize: '14px', minWidth: '30px' }}>{sampling}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label style={{ fontSize: '14px' }}>方柱大小:</label>
+            <input
+              type="range"
+              min="0.1"
+              max="2.0"
+              step="0.1"
+              value={boxSize}
+              onChange={(e) => setBoxSize(Number(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span style={{ fontSize: '14px', minWidth: '30px' }}>{boxSize.toFixed(1)}</span>
+          </div>
         </div>
-
-        {page === 'map' && (
-          <>
-            <h3>3D 地圖高度視覺化</h3>
-            <p>拖曳旋轉 | 滾輪縮放</p>
-            <div style={{ marginTop: '10px', display: 'flex', gap: '10px', flexDirection: 'column' }}>
-              <button
-                onClick={() => setColorMode(colorMode === 'opacity' ? 'color' : 'opacity')}
-                style={{
-                  padding: '8px 16px',
-                  background: '#00d9ff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  color: '#000',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '14px'
-                }}
-              >
-                {colorMode === 'opacity' ? '切換至漸層色' : '切換至透明度'}
-              </button>
-              <button
-                onClick={() => setIsCircular(!isCircular)}
-                style={{
-                  padding: '8px 16px',
-                  background: '#00d9ff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  color: '#000',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '14px'
-                }}
-              >
-                {isCircular ? '切換至方形' : '切換至圓形'}
-              </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <label style={{ fontSize: '14px' }}>稀疏度:</label>
-                <input
-                  type="range"
-                  min="1"
-                  max="5"
-                  value={sampling}
-                  onChange={(e) => setSampling(Number(e.target.value))}
-                  style={{ flex: 1 }}
-                />
-                <span style={{ fontSize: '14px', minWidth: '30px' }}>{sampling}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <label style={{ fontSize: '14px' }}>方柱大小:</label>
-                <input
-                  type="range"
-                  min="0.1"
-                  max="2.0"
-                  step="0.1"
-                  value={boxSize}
-                  onChange={(e) => setBoxSize(Number(e.target.value))}
-                  style={{ flex: 1 }}
-                />
-                <span style={{ fontSize: '14px', minWidth: '30px' }}>{boxSize.toFixed(1)}</span>
-              </div>
-            </div>
-          </>
-        )}
       </div>
 
-      {page === 'map' ? (
-        <Canvas 
-          camera={{ position: [35, 30, 35], fov: 60 }}
-          gl={{ antialias: true, alpha: true }}
-        >
-          <Scene colorMode={colorMode} isCircular={isCircular} sampling={sampling} boxSize={boxSize} />
-        </Canvas>
-      ) : (
-        <div style={{ width: '100vw', height: '100vh' }}>
-          <VideoAsciiDemo />
-        </div>
-      )}
+      <Canvas 
+        camera={{ position: [35, 30, 35], fov: 60 }}
+        gl={{ antialias: true, alpha: true }}
+      >
+        <Scene colorMode={colorMode} isCircular={isCircular} sampling={sampling} boxSize={boxSize} />
+      </Canvas>
     </div>
   )
 }
