@@ -1,38 +1,11 @@
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, useTexture } from '@react-three/drei'
+import { OrbitControls } from '@react-three/drei'
 import { useRef, useMemo, useEffect, useState } from 'react'
 import * as THREE from 'three'
 import './App.css'
-
-// 生成模擬的高度圖資料（實際使用時可以從圖片或API載入）
-function generateHeightMapData(width, height, isCircular = false, sampling = 1) {
-  const data = []
-  const centerX = width / 2
-  const centerY = height / 2
-  const radius = Math.min(width, height) / 2
-  
-  for (let y = 0; y < height; y += sampling) {
-    for (let x = 0; x < width; x += sampling) {
-      // 如果是圓形模式，檢查點是否在圓內
-      if (isCircular) {
-        const dx = x - centerX
-        const dy = y - centerY
-        const distance = Math.sqrt(dx * dx + dy * dy)
-        if (distance > radius) continue // 跳過圓外的點
-      }
-      
-      // 使用多個正弦波模擬地形
-      const nx = x / width - 0.5
-      const ny = y / height - 0.5
-      const height1 = Math.sin(nx * Math.PI * 4) * Math.cos(ny * Math.PI * 4) * 0.3
-      const height2 = Math.sin(nx * Math.PI * 8 + ny * Math.PI * 8) * 0.15
-      const height3 = Math.sin((nx + ny) * Math.PI * 12) * 0.1
-      const heightValue = (height1 + height2 + height3 + 0.5) * 10
-      data.push({ x, y, height: heightValue })
-    }
-  }
-  return data
-}
+import TerrainSourcePanel from './terrain/TerrainSourcePanel'
+import { PRESET_AREAS } from './terrain/presets'
+import { useTerrainData } from './terrain/useTerrainData'
 
 // 根據高度區間獲取顏色
 function getColorByHeightGroup(groupIndex) {
@@ -51,28 +24,24 @@ function getColorByHeightGroup(groupIndex) {
   return colors[groupIndex] || '#00d9ff'
 }
 
-function TerrainMap({ mapWidth = 50, mapHeight = 50, spacing = 0.5, colorMode = 'opacity', isCircular = false, sampling = 1, boxSize = 0.6 }) {
+const MIN_BAR_HEIGHT = 0.05
+
+function TerrainMap({ heightMapData, mapWidth = 50, mapHeight = 50, spacing = 0.5, colorMode = 'opacity', boxSize = 0.6 }) {
   const meshRefs = useRef([])
-  
-  // 生成地形資料
-  const heightMapData = useMemo(() => {
-    return generateHeightMapData(mapWidth, mapHeight, isCircular, sampling)
-  }, [mapWidth, mapHeight, isCircular, sampling])
-  
-  // 找出最大和最小高度
+
+  // 找出最大和最小高度（真實地形點數可達 6 萬，避免使用 spread 參數）
   const { maxHeight, minHeight } = useMemo(() => {
-    const heights = heightMapData.map(d => d.height)
-    return {
-      maxHeight: Math.max(...heights),
-      minHeight: Math.min(...heights)
-    }
+    return heightMapData.reduce(
+      (acc, d) => ({ maxHeight: Math.max(acc.maxHeight, d.height), minHeight: Math.min(acc.minHeight, d.height) }),
+      { maxHeight: -Infinity, minHeight: Infinity }
+    )
   }, [heightMapData])
-  
+
   // 將資料分成10個高度區間
   const heightGroups = useMemo(() => {
     const groups = Array.from({ length: 10 }, () => [])
-    const heightRange = maxHeight - minHeight
-    
+    const heightRange = maxHeight - minHeight || 1 // 全平地時避免除以 0
+
     heightMapData.forEach(point => {
       const normalized = (point.height - minHeight) / heightRange
       const groupIndex = Math.min(Math.floor(normalized * 10), 9)
@@ -100,8 +69,8 @@ function TerrainMap({ mapWidth = 50, mapHeight = 50, spacing = 0.5, colorMode = 
       group.forEach((point, i) => {
         const x = (point.x - mapWidth / 2) * spacing
         const z = (point.y - mapHeight / 2) * spacing
-        const height = point.height
-        
+        const height = Math.max(point.height, MIN_BAR_HEIGHT) // 海面等 0 高度仍保留薄薄一層
+
         tempObject.position.set(x, height / 2, z)
         tempObject.scale.set(1, height, 1)
         tempObject.updateMatrix()
@@ -168,24 +137,25 @@ function TerrainMap({ mapWidth = 50, mapHeight = 50, spacing = 0.5, colorMode = 
   )
 }
 
-function Scene({ colorMode, isCircular, sampling, boxSize }) {
+function Scene({ terrain, terrainKey, colorMode, boxSize }) {
   return (
     <>
       <ambientLight intensity={0.3} />
       <directionalLight position={[20, 30, 10]} intensity={0.8} />
       <directionalLight position={[-10, 20, -10]} intensity={0.4} />
-      
-      <TerrainMap 
-        key={`${isCircular ? 'circular' : 'square'}-${sampling}-${boxSize}`}
-        mapWidth={60} 
-        mapHeight={60} 
-        spacing={1.0} 
-        colorMode={colorMode} 
-        isCircular={isCircular}
-        sampling={sampling}
-        boxSize={boxSize}
-      />
-      
+
+      {terrain && (
+        <TerrainMap
+          key={`${terrainKey}-${boxSize}`}
+          heightMapData={terrain.points}
+          mapWidth={terrain.cols}
+          mapHeight={terrain.rows}
+          spacing={terrain.spacing}
+          colorMode={colorMode}
+          boxSize={boxSize}
+        />
+      )}
+
       {/* 網格輔助線 */}
       <gridHelper args={[50, 50, 0x333333, 0x111111]} position={[0, -1, 0]} />
       
@@ -205,13 +175,52 @@ function App() {
   const [isCircular, setIsCircular] = useState(false)
   const [sampling, setSampling] = useState(1)
   const [boxSize, setBoxSize] = useState(0.6)
+  const [source, setSource] = useState('simulated') // 'simulated' | 'terrarium'
+  const [area, setArea] = useState(PRESET_AREAS[0].area)
+  const [isAutoExaggeration, setIsAutoExaggeration] = useState(true)
+  const [manualExaggeration, setManualExaggeration] = useState(1)
+
+  const { terrain, terrainKey, status, error, summary } = useTerrainData({
+    source, area, isCircular, sampling, isAutoExaggeration, manualExaggeration,
+  })
+  const exaggeration = summary?.exaggeration ?? manualExaggeration
+
+  // 換範圍後比例尺不同，倍率切回自動
+  const handleAreaChange = (nextArea) => {
+    setArea(nextArea)
+    setIsAutoExaggeration(true)
+  }
+
+  // 關閉自動時，從目前的自動倍率開始手動調整
+  const handleAutoExaggerationChange = (isAuto) => {
+    if (!isAuto) setManualExaggeration(exaggeration)
+    setIsAutoExaggeration(isAuto)
+  }
+
+  const handleManualExaggerationChange = (value) => {
+    setManualExaggeration(value)
+    setIsAutoExaggeration(false)
+  }
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#000' }}>
-      <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', zIndex: 1, fontFamily: 'monospace' }}>
+      <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', zIndex: 1, fontFamily: 'monospace', width: '260px' }}>
         <h3>3D 地圖高度視覺化</h3>
         <p>拖曳旋轉 | 滾輪縮放</p>
         <div style={{ marginTop: '10px', display: 'flex', gap: '10px', flexDirection: 'column' }}>
+          <TerrainSourcePanel
+            source={source}
+            onSourceChange={setSource}
+            area={area}
+            onAreaChange={handleAreaChange}
+            isAutoExaggeration={isAutoExaggeration}
+            onAutoExaggerationChange={handleAutoExaggerationChange}
+            exaggeration={exaggeration}
+            onManualExaggerationChange={handleManualExaggerationChange}
+            status={status}
+            error={error}
+            summary={summary}
+          />
           <button
             onClick={() => setColorMode(colorMode === 'opacity' ? 'color' : 'opacity')}
             style={{
@@ -274,7 +283,7 @@ function App() {
         camera={{ position: [35, 30, 35], fov: 60 }}
         gl={{ antialias: true, alpha: true }}
       >
-        <Scene colorMode={colorMode} isCircular={isCircular} sampling={sampling} boxSize={boxSize} />
+        <Scene terrain={terrain} terrainKey={terrainKey} colorMode={colorMode} boxSize={boxSize} />
       </Canvas>
     </div>
   )
