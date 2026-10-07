@@ -304,3 +304,73 @@
 .panel__segmented--3 {
   grid-template-columns: repeat(3, 1fr);
 }
+
+.field__numbers {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 3px;
+  margin-top: 6px;
+}
+
+.field__numbers button {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 0;
+  border: 1px solid rgba(23, 37, 27, 0.25);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.field__numbers button:hover {
+  transform: translateY(-1px);
+}
+
+.field__numbers button.is-active {
+  box-shadow: 0 0 0 2px var(--panel-bg, #fff), 0 0 0 4px var(--accent);
+}
+
+.field__ranking {
+  list-style: none;
+  margin-top: 8px;
+  display: grid;
+  gap: 2px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.field__ranking li {
+  display: grid;
+  grid-template-columns: 18px 24px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.field__ranking li.is-player {
+  background: rgba(47, 122, 53, 0.14);
+  font-weight: 700;
+}
+
+.field__rank {
+  text-align: right;
+  font-weight: 800;
+}
+
+.field__number {
+  text-align: center;
+  font-weight: 800;
+  border-radius: 3px;
+  border: 1px solid rgba(23, 37, 27, 0.25);
+}
+
+.field__style {
+  color: var(--muted);
+}
+
+.field__gap {
+  color: var(--muted);
+}

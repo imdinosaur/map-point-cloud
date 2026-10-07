@@ -150,3 +150,19 @@ describe('chuteBranches', () => {
     }
   })
 })
+
+describe('run lane frame', () => {
+  const run = model.createRun('turf-2000', 0)
+
+  it('gives an outward normal per point that matches the starting gate direction at the start', () => {
+    expect(run.outward).toHaveLength(run.path.points.length)
+    const [first] = run.outward
+    expect(first.x * run.startOutward.x + first.z * run.startOutward.z).toBeGreaterThan(0.9)
+  })
+
+  it('reports positive curvature on the bends and almost none on the home straight', () => {
+    const bend = Math.max(...Array.from({ length: 50 }, (_, k) => run.curvatureAt(run.distance * 0.6 + k * 4)))
+    expect(bend).toBeGreaterThan(1 / 200)
+    expect(Math.abs(run.curvatureAt(run.distance - 150))).toBeLessThan(1 / 2000)
+  })
+})

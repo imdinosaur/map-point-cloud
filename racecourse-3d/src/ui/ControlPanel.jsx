@@ -2,6 +2,7 @@ import { DIRT, STEEPLE, TURF, TURF_COURSES } from '../course/courseData'
 import { COLORS } from '../scene/sceneConfig'
 import ExaggerationSlider from './ExaggerationSlider'
 import ProfileChart from './ProfileChart'
+import RaceField from './RaceField'
 import RaceSelector from './RaceSelector'
 import './ControlPanel.css'
 
@@ -22,6 +23,7 @@ const LEGEND = [
 /**
  * @param {{
  *   course: keyof typeof TURF_COURSES, onCourseChange: (c: string) => void,
+ *   isRace: boolean, playerNumber: number, onPlayerNumberChange: (n: number) => void, rankingStore,
  *   runId: string, onRunChange: (id: string) => void, surface: 'turf' | 'dirt',
  *   modelLengths: Record<string, number>,
  *   exaggeration: number, onExaggerationChange: (v: number) => void,
@@ -33,6 +35,10 @@ const LEGEND = [
  */
 export default function ControlPanel({
   course,
+  isRace,
+  playerNumber,
+  onPlayerNumberChange,
+  rankingStore,
   onCourseChange,
   runId,
   onRunChange,
@@ -77,6 +83,9 @@ export default function ControlPanel({
       </section>
       <ProfileChart markerRef={markerRef} />
       <RaceSelector runId={runId} onRunChange={onRunChange} />
+      {isRace && (
+        <RaceField playerNumber={playerNumber} onPlayerNumberChange={onPlayerNumberChange} rankingStore={rankingStore} />
+      )}
 
       <section className="panel__group">
         <span className="panel__label">芝コース（仮柵位置）</span>

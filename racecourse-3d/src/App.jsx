@@ -5,6 +5,7 @@ import { TURF_COURSES } from './course/courseData'
 import { createCourseModel, isValidRunId } from './course/courseModel'
 import Landmarks from './scene/Landmarks'
 import RaceGuide from './scene/RaceGuide'
+import Field from './scene/Field'
 import FollowCamera from './scene/FollowCamera'
 import Runner from './scene/Runner'
 import SunLight, { SUN_DIRECTION } from './scene/SunLight'
@@ -15,6 +16,7 @@ import { useSurfaceMaterials } from './scene/useSurfaceMaterials'
 import { chartX, chartY } from './ui/chartScale'
 import ControlPanel from './ui/ControlPanel'
 import { EXAGGERATION } from './ui/exaggerationScale'
+import { createRankingStore } from './ui/rankingStore'
 
 // 模型只依官方數據與描點計算，與 UI 狀態無關，建立一次即可
 const MODEL = createCourseModel()
@@ -47,7 +49,12 @@ export default function App() {
   const [speedMultiplier, setSpeedMultiplier] = useState(5)
   const [runId, setRunId] = useState(readRunIdFromUrl)
   const [viewMode, setViewMode] = useState('overview')
+  const [playerNumber, setPlayerNumber] = useState(1)
+  // 玩家跑者的位置：連續繞圈時由 Runner 自己推進，比賽時由 Field 的馬群模擬寫入
   const traveledRef = useRef(0)
+  const lateralRef = useRef(0)
+  const playerMovingRef = useRef(false)
+  const rankingStore = useMemo(() => createRankingStore(), [])
   const surfaceMaterials = useSurfaceMaterials()
   const remainingRef = useRef(null)
   const elevationRef = useRef(null)
@@ -100,27 +107,54 @@ export default function App() {
         <Tracks model={MODEL} railShift={railShift} exaggeration={exaggeration} base={base} materials={surfaceMaterials} detailedRails={viewMode !== 'overview'} />
         <Landmarks model={MODEL} railShift={railShift} exaggeration={exaggeration} />
         <RaceGuide run={run} exaggeration={exaggeration} />
+        {/* 比賽時由馬群模擬決定玩家位置，必須排在 Runner 之前 */}
+        {!run.isLap && (
+          <Field
+            run={run}
+            exaggeration={exaggeration}
+            playing={playing}
+            speedMultiplier={speedMultiplier}
+            playerNumber={playerNumber}
+            traveledRef={traveledRef}
+            lateralRef={lateralRef}
+            playerMovingRef={playerMovingRef}
+            rankingStore={rankingStore}
+          />
+        )}
         <Runner
           run={run}
           exaggeration={exaggeration}
           playing={playing}
           speedMultiplier={speedMultiplier}
           traveledRef={traveledRef}
+          lateralRef={lateralRef}
+          driven={!run.isLap}
+          drivenMovingRef={playerMovingRef}
           hidden={viewMode === 'rider'}
           showMarker={viewMode === 'overview'}
           onProgress={handleProgress}
         />
         {/* 太陽、跟隨鏡頭都讀取 Runner 這一幀更新的位置，必須排在 Runner 之後 */}
-        <SunLight follow={viewMode !== 'overview'} run={run} traveledRef={traveledRef} exaggeration={exaggeration} />
+        <SunLight
+          follow={viewMode !== 'overview'}
+          run={run}
+          traveledRef={traveledRef}
+          lateralRef={lateralRef}
+          exaggeration={exaggeration}
+        />
         {/* 跟隨鏡頭接管時移除 OrbitControls，回到俯瞰時重新掛上並沿用原本的注視點 */}
         {viewMode !== 'overview' ? (
-          <FollowCamera mode={viewMode} run={run} traveledRef={traveledRef} exaggeration={exaggeration} />
+          <FollowCamera mode={viewMode} run={run} traveledRef={traveledRef} lateralRef={lateralRef} exaggeration={exaggeration} />
         ) : (
           <OrbitControls makeDefault target={CAMERA_TARGET} maxPolarAngle={Math.PI / 2.1} minDistance={40} maxDistance={2500} />
         )}
       </Canvas>
 
       <ControlPanel
+        isRace={!run.isLap}
+        playerNumber={playerNumber}
+        onPlayerNumberChange={setPlayerNumber}
+        rankingStore={rankingStore}
         course={course}
         onCourseChange={setCourse}
         runId={runId}

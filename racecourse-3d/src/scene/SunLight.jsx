@@ -24,7 +24,7 @@ const center = new Vector3()
  * 太陽光。俯瞰時固定照整座場地；追跡、騎手視角時陰影範圍跟著跑者移動，並對齊陰影像素避免閃爍。
  * 須掛在 Runner 之後，才能讀到同一幀更新過的 traveledRef。
  */
-export default function SunLight({ follow, run, traveledRef, exaggeration }) {
+export default function SunLight({ follow, run, traveledRef, lateralRef, exaggeration }) {
   const lightRef = useRef(null)
   const mode = SHADOW_MODES[follow ? 'follow' : 'overview']
 
@@ -42,7 +42,7 @@ export default function SunLight({ follow, run, traveledRef, exaggeration }) {
 
   useFrame(() => {
     if (!follow) return
-    const { x, y, z } = runPositionAt(run, traveledRef.current, exaggeration)
+    const { x, y, z } = runPositionAt(run, traveledRef.current, exaggeration, lateralRef.current)
     const texel = (2 * mode.extent) / SHADOW_MAP_SIZE
     placeSun(lightRef.current, snapToShadowTexel(center.set(x, y, z), SUN_DIRECTION, texel), mode.distance)
   })
