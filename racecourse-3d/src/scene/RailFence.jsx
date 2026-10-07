@@ -40,10 +40,10 @@ export default function RailFence({ path, closed }) {
 
   return (
     <group>
-      {/* 不投影：陰影貼圖每像素約 34cm，12cm 的橫桿會變成一排方塊狀黑影 */}
-      <mesh geometry={railGeometry} material={RAIL_MATERIAL} />
+      {/* 立體護欄只在追跡、騎手視角出現，此時陰影跟著跑者、每像素約 3cm，可以投影 */}
+      <mesh geometry={railGeometry} material={RAIL_MATERIAL} castShadow />
       {/* 欄柱數量隨長度改變時要重建 InstancedMesh */}
-      <instancedMesh key={posts.length} ref={postsRef} args={[POST_GEOMETRY, RAIL_MATERIAL, posts.length]} />
+      <instancedMesh key={posts.length} ref={postsRef} args={[POST_GEOMETRY, RAIL_MATERIAL, posts.length]} castShadow />
     </group>
   )
 }

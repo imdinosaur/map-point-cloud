@@ -1,12 +1,13 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
+import { Environment, Lightformer, OrbitControls, Sky } from '@react-three/drei'
 import { TURF_COURSES } from './course/courseData'
 import { createCourseModel, isValidRunId } from './course/courseModel'
 import Landmarks from './scene/Landmarks'
 import RaceGuide from './scene/RaceGuide'
 import FollowCamera from './scene/FollowCamera'
 import Runner from './scene/Runner'
+import SunLight, { SUN_DIRECTION } from './scene/SunLight'
 import Tracks from './scene/Tracks'
 import Venue from './scene/Venue'
 import { COLORS } from './scene/sceneConfig'
@@ -21,7 +22,8 @@ const MODEL_LENGTHS = Object.fromEntries(
   Object.entries(TURF_COURSES).map(([key, { railShift }]) => [key, MODEL.measureLength(-railShift)]),
 )
 const LOWEST_ELEVATION = -3
-const SHADOW_EXTENT = 700
+// 天空中太陽的位置（與 SunLight 的光源方向一致）
+const SUN_SKY_POSITION = SUN_DIRECTION.clone().multiplyScalar(1000).toArray()
 // 初始視角：拉遠到能同時看到整圈與右側引込線，並避開左上控制面板
 const CAMERA_TARGET = [-20, 0, 50]
 
@@ -79,18 +81,15 @@ export default function App() {
       <Canvas shadows camera={{ position: [-20, 820, 760], fov: 45, near: 5, far: 8000 }}>
         <color attach="background" args={[COLORS.sky]} />
         <fog attach="fog" args={[COLORS.sky, 1800, 5000]} />
-        <hemisphereLight args={['#f4f8ff', '#4b6640', 0.9]} />
-        <directionalLight
-          position={[-400, 600, 300]}
-          intensity={1.6}
-          castShadow
-          shadow-mapSize={[4096, 4096]}
-          shadow-camera-left={-SHADOW_EXTENT}
-          shadow-camera-right={SHADOW_EXTENT}
-          shadow-camera-top={SHADOW_EXTENT}
-          shadow-camera-bottom={-SHADOW_EXTENT}
-          shadow-camera-far={2000}
-        />
+        {/* 程序式天空（不需下載），距離要小於鏡頭 far 才不會被裁掉 */}
+        <Sky distance={6000} sunPosition={SUN_SKY_POSITION} turbidity={2.5} rayleigh={2.5} mieCoefficient={0.003} mieDirectionalG={0.85} />
+        {/* 環境光：用 Lightformer 組出藍天＋草地反光，讓 PBR 路面與護欄有自然的反射，不需 HDR 檔 */}
+        <Environment resolution={128} frames={1} environmentIntensity={0.45}>
+          <Lightformer form="rect" intensity={1.2} color="#cfe3ff" scale={[40, 40, 1]} position={[0, 10, 0]} rotation={[Math.PI / 2, 0, 0]} />
+          <Lightformer form="rect" intensity={0.35} color="#56794a" scale={[40, 40, 1]} position={[0, -10, 0]} rotation={[-Math.PI / 2, 0, 0]} />
+          <Lightformer form="circle" intensity={3} color="#fff4e0" scale={4} position={SUN_SKY_POSITION.map((v) => v / 100)} />
+        </Environment>
+        <hemisphereLight args={['#f4f8ff', '#4b6640', 0.45]} />
 
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, base - 0.01, 0]} receiveShadow>
           <planeGeometry args={[6000, 6000]} />
@@ -111,6 +110,8 @@ export default function App() {
           showMarker={viewMode === 'overview'}
           onProgress={handleProgress}
         />
+        {/* 太陽、跟隨鏡頭都讀取 Runner 這一幀更新的位置，必須排在 Runner 之後 */}
+        <SunLight follow={viewMode !== 'overview'} run={run} traveledRef={traveledRef} exaggeration={exaggeration} />
         {/* 跟隨鏡頭接管時移除 OrbitControls，回到俯瞰時重新掛上並沿用原本的注視點 */}
         {viewMode !== 'overview' ? (
           <FollowCamera mode={viewMode} run={run} traveledRef={traveledRef} exaggeration={exaggeration} />
