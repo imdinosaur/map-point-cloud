@@ -1,0 +1,106 @@
+import { describe, expect, it } from 'vitest'
+import { CHUTE_STARTS } from './chute'
+import { DIRT, RACE_DISTANCES, STEEPLE, TURF, TURF_COURSES } from './courseData'
+import { createCourseModel, isValidRunId, LAYOUT, offsetForLength, parseRunId, turfWidthAt } from './courseModel'
+
+const model = createCourseModel()
+const distanceToLoop = (p) => Math.min(...model.points.map((q) => Math.hypot(p.x - q.x, p.z - q.z)))
+
+describe('createCourseModel', () => {
+  it('reproduces the official lap lengths of turf A〜D within 0.5%', () => {
+    for (const { length, railShift } of Object.values(TURF_COURSES)) {
+      expect(Math.abs(model.measureLength(-railShift) - length) / length).toBeLessThan(0.005)
+    }
+  })
+
+  it('reproduces dirt and steeplechase lap lengths within 1%', () => {
+    for (const { length } of [DIRT, STEEPLE]) {
+      expect(Math.abs(model.measureLength(offsetForLength(length)) - length) / length).toBeLessThan(0.01)
+    }
+  })
+
+  it('puts the goal at elevation 0 and the backstretch below it', () => {
+    expect(model.turfElevation(0)).toBe(0)
+    const backstretch = model.indexForRemaining(900, TURF.length)
+    expect(model.turfElevation(backstretch)).toBeLessThan(-2)
+  })
+
+  it('keeps the dirt course inside the turf course without overlap', () => {
+    expect(LAYOUT.dirtOuter).toBeGreaterThan(LAYOUT.turfRail)
+    expect(LAYOUT.steepleOuter).toBeGreaterThan(LAYOUT.dirtRail)
+  })
+
+  it('joins the chute at the end of the backstretch, before the 1,600m start', () => {
+    expect(model.junctionRemaining).toBeLessThan(CHUTE_STARTS.pocket)
+    expect(model.junctionRemaining).toBeGreaterThan(CHUTE_STARTS.pocket - 150)
+  })
+})
+
+describe('createRun', () => {
+  it('runs every official distance from start to goal', () => {
+    for (const [surface, distances] of Object.entries(RACE_DISTANCES)) {
+      for (const distance of distances) {
+        const run = model.createRun(`${surface}-${distance}`, 0)
+        expect(Math.abs(run.distance - distance)).toBeLessThan(1)
+        expect(run.elevations.at(-1)).toBeCloseTo(0)
+      }
+    }
+  })
+
+  it('starts 1,600m / 1,800m / 2,000m on the chute and the rest on the oval', () => {
+    const startOffset = (distance) => distanceToLoop(model.createRun(`turf-${distance}`, 0).path.points[0])
+    // 1,600m 在直線延長上、距匯入點僅約 70m，偏離圓弧較少
+    expect(startOffset(CHUTE_STARTS.pocket)).toBeGreaterThan(5)
+    expect(startOffset(CHUTE_STARTS.diagonal)).toBeGreaterThan(40)
+    expect(startOffset(CHUTE_STARTS.south)).toBeGreaterThan(40)
+    for (const distance of [1400, 2300, 3400]) expect(startOffset(distance)).toBeLessThan(1)
+  })
+
+  it('runs 2,000m around the outside, away from the 1,800m gate', () => {
+    const gate1800 = model.createRun('turf-1800', 0).path.points[0]
+    const path2000 = model.createRun('turf-2000', 0).path.points
+    const closest = Math.min(...path2000.map((p) => Math.hypot(p.x - gate1800.x, p.z - gate1800.z)))
+    expect(closest).toBeGreaterThan(12)
+  })
+
+  it('points the start outward, away from the infield', () => {
+    for (const id of ['turf-1400', 'turf-2300', 'dirt-1400', 'turf-1800']) {
+      const { path, startOutward } = model.createRun(id, 0)
+      const start = path.points[0]
+      const moved = { x: start.x + startOutward.x * 10, z: start.z + startOutward.z * 10 }
+      expect(Math.hypot(moved.x, moved.z)).toBeGreaterThan(Math.hypot(start.x, start.z))
+    }
+  })
+
+  it('fills the venue outside the oval', () => {
+    expect(model.venue.length).toBeGreaterThan(0)
+  })
+
+  it('moves turf runs outward with the B〜D rail', () => {
+    const a = model.createRun('lap', 0)
+    const d = model.createRun('lap', TURF_COURSES.D.railShift)
+    expect(d.distance - a.distance).toBeCloseTo(TURF_COURSES.D.length - TURF_COURSES.A.length, 0)
+  })
+})
+
+describe('parseRunId', () => {
+  it('parses lap and race ids', () => {
+    expect(parseRunId('lap')).toEqual({ surface: 'turf', distance: null })
+    expect(parseRunId('dirt-1400')).toEqual({ surface: 'dirt', distance: 1400 })
+  })
+
+  it('accepts only official distances', () => {
+    expect(isValidRunId('lap')).toBe(true)
+    expect(isValidRunId('turf-1800')).toBe(true)
+    expect(isValidRunId('dirt-1600')).toBe(false)
+    expect(isValidRunId('steeple-3000')).toBe(false)
+    expect(isValidRunId(null)).toBe(false)
+  })
+})
+
+describe('turfWidthAt', () => {
+  it('is widest on the home stretch and narrowest on the backstretch', () => {
+    expect(turfWidthAt(0.9)).toBeCloseTo(TURF.widthMax)
+    expect(turfWidthAt(0.5)).toBeCloseTo(TURF.widthMin)
+  })
+})

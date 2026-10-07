@@ -6,7 +6,8 @@
   "scripts": {
     "dev:map": "pnpm --filter point-cloud-map dev",
     "dev:ascii": "pnpm --filter ascii-video dev",
-    "build": "pnpm --filter point-cloud-map build && pnpm --filter ascii-video build",
+    "dev:race": "pnpm --filter racecourse-3d dev",
+    "build": "pnpm --filter point-cloud-map build && pnpm --filter ascii-video build && pnpm --filter racecourse-3d build",
     "predeploy": "pnpm build",
     "deploy": "gh-pages -d dist",
     "lint": "eslint ."
