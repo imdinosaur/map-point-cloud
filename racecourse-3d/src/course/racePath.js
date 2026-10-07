@@ -106,3 +106,13 @@ export function pointAlong(path, t) {
   const s = segment > 0 ? (clamped - traveled[lo]) / segment : 0
   return { ...lerpPoint(points[lo], points[lo + 1], s), index: lo, t: s }
 }
+
+/**
+ * 視線方向取樣區間：由已跑距離 from 看向 to（前方 ahead 公尺）。
+ * 連續繞圈時越過終點繞回起點；比賽跑法到終點時改取最後 ahead 公尺，視線維持直線方向。
+ */
+export function lookAheadSpan(length, traveled, isLap, ahead) {
+  if (isLap) return { from: traveled, to: (traveled + ahead) % length }
+  const to = Math.min(traveled + ahead, length)
+  return { from: Math.max(0, to - ahead), to }
+}

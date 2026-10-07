@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildLapPath, buildRacePath, createLoop, loopPositionFor, pointAlong } from './racePath'
+import { buildLapPath, buildRacePath, createLoop, lookAheadSpan, loopPositionFor, pointAlong } from './racePath'
 
 // 半徑 100 的圓，第 0 點為終點
 const circle = Array.from({ length: 720 }, (_, i) => {
@@ -62,5 +62,20 @@ describe('pointAlong', () => {
     expect(pointAlong(path, 5)).toMatchObject({ x: 5, z: 0, index: 0 })
     expect(pointAlong(path, 15)).toMatchObject({ x: 10, z: 5, index: 1 })
     expect(pointAlong(path, 99)).toMatchObject({ x: 10, z: 10 })
+  })
+})
+
+describe('lookAheadSpan', () => {
+  it('looks ahead from the current position mid-race', () => {
+    expect(lookAheadSpan(1000, 200, false, 30)).toEqual({ from: 200, to: 230 })
+  })
+
+  it('keeps the heading of the final stretch at the finish', () => {
+    expect(lookAheadSpan(1000, 1000, false, 30)).toEqual({ from: 970, to: 1000 })
+    expect(lookAheadSpan(1000, 990, false, 30)).toEqual({ from: 970, to: 1000 })
+  })
+
+  it('wraps past the goal on a continuous lap', () => {
+    expect(lookAheadSpan(1000, 990, true, 30)).toEqual({ from: 990, to: 20 })
   })
 })

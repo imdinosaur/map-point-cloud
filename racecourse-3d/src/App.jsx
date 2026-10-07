@@ -5,12 +5,14 @@ import { TURF_COURSES } from './course/courseData'
 import { createCourseModel, isValidRunId } from './course/courseModel'
 import Landmarks from './scene/Landmarks'
 import RaceGuide from './scene/RaceGuide'
+import RiderCamera from './scene/RiderCamera'
 import Runner from './scene/Runner'
 import Tracks from './scene/Tracks'
 import Venue from './scene/Venue'
 import { COLORS } from './scene/sceneConfig'
 import { chartX, chartY } from './ui/chartScale'
 import ControlPanel from './ui/ControlPanel'
+import { EXAGGERATION } from './ui/exaggerationScale'
 
 // 模型只依官方數據與描點計算，與 UI 狀態無關，建立一次即可
 const MODEL = createCourseModel()
@@ -37,10 +39,12 @@ function writeRunIdToUrl(id) {
 
 export default function App() {
   const [course, setCourse] = useState('A')
-  const [exaggeration, setExaggeration] = useState(8)
+  const [exaggeration, setExaggeration] = useState(EXAGGERATION.initial)
   const [playing, setPlaying] = useState(true)
   const [speedMultiplier, setSpeedMultiplier] = useState(5)
   const [runId, setRunId] = useState(readRunIdFromUrl)
+  const [isRiderView, setIsRiderView] = useState(false)
+  const traveledRef = useRef(0)
   const remainingRef = useRef(null)
   const elevationRef = useRef(null)
   const markerRef = useRef(null)
@@ -69,6 +73,7 @@ export default function App() {
 
   return (
     <>
+      {/* 俯瞰時 near 設 5m 提升深度精度，讓相差數公分的草地與芝面不會互相閃爍 */}
       <Canvas shadows camera={{ position: [-20, 820, 760], fov: 45, near: 5, far: 8000 }}>
         <color attach="background" args={[COLORS.sky]} />
         <fog attach="fog" args={[COLORS.sky, 1800, 5000]} />
@@ -99,11 +104,16 @@ export default function App() {
           exaggeration={exaggeration}
           playing={playing}
           speedMultiplier={speedMultiplier}
+          traveledRef={traveledRef}
+          hidden={isRiderView}
           onProgress={handleProgress}
         />
-
-        {/* near 設 5m 提升深度精度，讓相差數公分的草地與芝面不會互相閃爍 */}
-        <OrbitControls makeDefault target={CAMERA_TARGET} maxPolarAngle={Math.PI / 2.1} minDistance={40} maxDistance={2500} />
+        {/* 騎手視角接管鏡頭時移除 OrbitControls，回到俯瞰時重新掛上並沿用原本的注視點 */}
+        {isRiderView ? (
+          <RiderCamera run={run} traveledRef={traveledRef} exaggeration={exaggeration} />
+        ) : (
+          <OrbitControls makeDefault target={CAMERA_TARGET} maxPolarAngle={Math.PI / 2.1} minDistance={40} maxDistance={2500} />
+        )}
       </Canvas>
 
       <ControlPanel
@@ -117,6 +127,8 @@ export default function App() {
         onExaggerationChange={setExaggeration}
         playing={playing}
         onTogglePlaying={() => setPlaying((p) => !p)}
+        isRiderView={isRiderView}
+        onToggleRiderView={() => setIsRiderView((v) => !v)}
         speedMultiplier={speedMultiplier}
         onSpeedChange={setSpeedMultiplier}
         remainingRef={remainingRef}

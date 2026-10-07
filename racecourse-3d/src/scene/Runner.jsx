@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { pointAlong } from '../course/racePath'
-import { COLORS, RACE_SPEED, surfaceY } from './sceneConfig'
+import { COLORS, RACE_SPEED } from './sceneConfig'
+import { runPositionAt } from './runPosition'
 
 const BODY_RADIUS = 2.5
 const MAX_FRAME_DELTA = 0.1 // 分頁切回時 delta 可能很大，限制單幀推進量
@@ -9,31 +9,29 @@ const FINISH_HOLD = 1.5 // 跑完一場後在終點停留秒數
 
 /**
  * 沿 run.path 移動的標記。連續繞圈時無限循環；比賽跑法到終點停留後重新起跑。
+ * traveledRef 由外部提供，讓騎手視角讀取同一個位置。hidden 時只隱藏外觀、照常前進。
  * onProgress({ remaining, elevation, lapFraction }) 每幀呼叫，請只做 DOM 更新。
  */
-export default function Runner({ run, exaggeration, playing, speedMultiplier, onProgress }) {
+export default function Runner({ run, exaggeration, playing, speedMultiplier, traveledRef, hidden, onProgress }) {
   const groupRef = useRef(null)
-  const traveledRef = useRef(0)
   const holdRef = useRef(0)
 
   useEffect(() => {
     traveledRef.current = 0
     holdRef.current = 0
-  }, [run])
+  }, [run, traveledRef])
 
   useFrame((_, delta) => {
     const group = groupRef.current
     if (!group) return
-    const { path, elevations } = run
     const dt = Math.min(delta, MAX_FRAME_DELTA)
 
     if (playing) advance(run, traveledRef, holdRef, RACE_SPEED * speedMultiplier * dt, dt)
 
-    const { x, z, index, t } = pointAlong(path, traveledRef.current)
-    const elevation = elevations[index] + (elevations[index + 1] - elevations[index]) * t
-    group.position.set(x, surfaceY(run.surface, elevation, exaggeration), z)
+    const { x, y, z, elevation } = runPositionAt(run, traveledRef.current, exaggeration)
+    group.position.set(x, y, z)
 
-    const remaining = path.length - traveledRef.current
+    const remaining = run.path.length - traveledRef.current
     onProgress({
       remaining,
       elevation,
@@ -43,7 +41,7 @@ export default function Runner({ run, exaggeration, playing, speedMultiplier, on
   })
 
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} visible={!hidden}>
       <mesh position={[0, BODY_RADIUS, 0]} castShadow>
         <sphereGeometry args={[BODY_RADIUS, 24, 16]} />
         <meshStandardMaterial color={COLORS.runner} emissive={COLORS.runner} emissiveIntensity={0.35} />

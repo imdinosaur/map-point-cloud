@@ -1,5 +1,6 @@
 import { DIRT, STEEPLE, TURF, TURF_COURSES } from '../course/courseData'
 import { COLORS } from '../scene/sceneConfig'
+import ExaggerationSlider from './ExaggerationSlider'
 import ProfileChart from './ProfileChart'
 import RaceSelector from './RaceSelector'
 import './ControlPanel.css'
@@ -19,6 +20,7 @@ const LEGEND = [
  *   modelLengths: Record<string, number>,
  *   exaggeration: number, onExaggerationChange: (v: number) => void,
  *   playing: boolean, onTogglePlaying: () => void,
+ *   isRiderView: boolean, onToggleRiderView: () => void,
  *   speedMultiplier: number, onSpeedChange: (v: number) => void,
  *   remainingRef, elevationRef, markerRef: 每幀由 Runner 直接寫入的 DOM 節點
  * }} props
@@ -34,6 +36,8 @@ export default function ControlPanel({
   onExaggerationChange,
   playing,
   onTogglePlaying,
+  isRiderView,
+  onToggleRiderView,
   speedMultiplier,
   onSpeedChange,
   remainingRef,
@@ -89,18 +93,27 @@ export default function ControlPanel({
         </p>
       </section>
 
+      <ExaggerationSlider exaggeration={exaggeration} onExaggerationChange={onExaggerationChange} />
+
       <section className="panel__group">
-        <label className="panel__label" htmlFor="exaggeration">
-          高度誇張 ×{exaggeration}
-        </label>
-        <input
-          id="exaggeration"
-          type="range"
-          min="1"
-          max="30"
-          value={exaggeration}
-          onChange={(e) => onExaggerationChange(Number(e.target.value))}
-        />
+        <span className="panel__label">視角</span>
+        <div className="panel__segmented panel__segmented--2" role="radiogroup" aria-label="視角">
+          {[
+            { value: false, label: '俯瞰' },
+            { value: true, label: '騎手目線' },
+          ].map(({ value, label }) => (
+            <button
+              key={label}
+              type="button"
+              role="radio"
+              aria-checked={isRiderView === value}
+              className={isRiderView === value ? 'is-active' : ''}
+              onClick={() => isRiderView !== value && onToggleRiderView()}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </section>
 
       <section className="panel__group panel__row">

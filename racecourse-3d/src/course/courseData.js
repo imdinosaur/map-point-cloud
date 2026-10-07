@@ -14,6 +14,9 @@ export const TURF = { length: 2083.1, straight: 525.9, widthMin: 31, widthMax: 4
 export const DIRT = { length: 1899, straight: 501.6, width: 25, elevationRange: 2.5 }
 export const STEEPLE = { length: 1674.7, width: 25, elevationRange: 3.4 }
 
+/** 直線上的坂（JRA：殘り 460m 附近起、約 2m 的上坡） */
+export const GOAL_SLOPE = { rise: 2 }
+
 /**
  * 高低斷面圖（從 JRA 斷面圖目測描點）
  * 每筆為 [距終點剩餘距離, 相對終點高度]；剩餘距離 = 1 周距離時即從終點出發。

@@ -216,3 +216,91 @@
   border-color: var(--ink);
   color: #ffe14d;
 }
+
+.exaggeration__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.exaggeration__rise {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.exaggeration__rise b {
+  font-size: 15px;
+  color: var(--ink);
+  transition: color 150ms ease;
+}
+
+.exaggeration__scale {
+  display: flex;
+  justify-content: space-between;
+}
+
+.exaggeration__scale button {
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.exaggeration__scale button:hover {
+  color: var(--accent);
+}
+
+.exaggeration.is-meme {
+  --accent: #d8322f;
+}
+
+.exaggeration.is-meme .exaggeration__rise b,
+.exaggeration__meme-btn:hover {
+  color: #d8322f;
+}
+
+/* 「高低差200Mの坂」：スポーツ紙の見出し風 */
+.exaggeration__meme {
+  margin-top: 6px;
+  padding: 6px 10px;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: #d8322f;
+  border: 2px solid #17251b;
+  box-shadow: 3px 3px 0 #17251b;
+  transform: rotate(-2deg);
+  animation: meme-stamp 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.exaggeration__meme em {
+  font-style: normal;
+  font-size: 28px;
+  color: #ffe14d;
+  margin: 0 2px;
+}
+
+@keyframes meme-stamp {
+  from {
+    opacity: 0;
+    transform: rotate(-8deg) scale(1.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exaggeration__meme {
+    animation: none;
+  }
+}
+
+.panel__segmented--2 {
+  grid-template-columns: repeat(2, 1fr);
+}
