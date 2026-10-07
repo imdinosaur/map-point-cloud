@@ -10,6 +10,7 @@ import Runner from './scene/Runner'
 import Tracks from './scene/Tracks'
 import Venue from './scene/Venue'
 import { COLORS } from './scene/sceneConfig'
+import { useSurfaceMaterials } from './scene/useSurfaceMaterials'
 import { chartX, chartY } from './ui/chartScale'
 import ControlPanel from './ui/ControlPanel'
 import { EXAGGERATION } from './ui/exaggerationScale'
@@ -45,6 +46,7 @@ export default function App() {
   const [runId, setRunId] = useState(readRunIdFromUrl)
   const [viewMode, setViewMode] = useState('overview')
   const traveledRef = useRef(0)
+  const surfaceMaterials = useSurfaceMaterials()
   const remainingRef = useRef(null)
   const elevationRef = useRef(null)
   const markerRef = useRef(null)
@@ -95,8 +97,8 @@ export default function App() {
           <meshStandardMaterial color={COLORS.ground} roughness={1} />
         </mesh>
 
-        <Venue model={MODEL} exaggeration={exaggeration} base={base} />
-        <Tracks model={MODEL} railShift={railShift} exaggeration={exaggeration} base={base} />
+        <Venue model={MODEL} exaggeration={exaggeration} base={base} materials={surfaceMaterials} />
+        <Tracks model={MODEL} railShift={railShift} exaggeration={exaggeration} base={base} materials={surfaceMaterials} detailedRails={viewMode !== 'overview'} />
         <Landmarks model={MODEL} railShift={railShift} exaggeration={exaggeration} />
         <RaceGuide run={run} exaggeration={exaggeration} />
         <Runner
