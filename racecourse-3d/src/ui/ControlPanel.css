@@ -301,6 +301,6 @@
   }
 }
 
-.panel__segmented--2 {
-  grid-template-columns: repeat(2, 1fr);
+.panel__segmented--3 {
+  grid-template-columns: repeat(3, 1fr);
 }

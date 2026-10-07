@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# 角色模型僅供本機使用（版權屬原作者，不可公開散布）
+racecourse-3d/public/models/*.vrm

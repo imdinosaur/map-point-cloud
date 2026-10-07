@@ -5,6 +5,12 @@ import ProfileChart from './ProfileChart'
 import RaceSelector from './RaceSelector'
 import './ControlPanel.css'
 
+const VIEW_MODES = [
+  { value: 'overview', label: '俯瞰' },
+  { value: 'chase', label: '追跡' },
+  { value: 'rider', label: '騎手目線' },
+]
+
 const SOURCE_URL = 'https://www.jra.go.jp/facilities/race/tokyo/course/index.html'
 
 const LEGEND = [
@@ -20,7 +26,7 @@ const LEGEND = [
  *   modelLengths: Record<string, number>,
  *   exaggeration: number, onExaggerationChange: (v: number) => void,
  *   playing: boolean, onTogglePlaying: () => void,
- *   isRiderView: boolean, onToggleRiderView: () => void,
+ *   viewMode: 'overview' | 'chase' | 'rider', onViewModeChange: (m: string) => void,
  *   speedMultiplier: number, onSpeedChange: (v: number) => void,
  *   remainingRef, elevationRef, markerRef: 每幀由 Runner 直接寫入的 DOM 節點
  * }} props
@@ -36,8 +42,8 @@ export default function ControlPanel({
   onExaggerationChange,
   playing,
   onTogglePlaying,
-  isRiderView,
-  onToggleRiderView,
+  viewMode,
+  onViewModeChange,
   speedMultiplier,
   onSpeedChange,
   remainingRef,
@@ -97,18 +103,15 @@ export default function ControlPanel({
 
       <section className="panel__group">
         <span className="panel__label">視角</span>
-        <div className="panel__segmented panel__segmented--2" role="radiogroup" aria-label="視角">
-          {[
-            { value: false, label: '俯瞰' },
-            { value: true, label: '騎手目線' },
-          ].map(({ value, label }) => (
+        <div className="panel__segmented panel__segmented--3" role="radiogroup" aria-label="視角">
+          {VIEW_MODES.map(({ value, label }) => (
             <button
-              key={label}
+              key={value}
               type="button"
               role="radio"
-              aria-checked={isRiderView === value}
-              className={isRiderView === value ? 'is-active' : ''}
-              onClick={() => isRiderView !== value && onToggleRiderView()}
+              aria-checked={viewMode === value}
+              className={viewMode === value ? 'is-active' : ''}
+              onClick={() => onViewModeChange(value)}
             >
               {label}
             </button>

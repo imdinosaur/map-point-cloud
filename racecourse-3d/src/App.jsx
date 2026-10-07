@@ -5,7 +5,7 @@ import { TURF_COURSES } from './course/courseData'
 import { createCourseModel, isValidRunId } from './course/courseModel'
 import Landmarks from './scene/Landmarks'
 import RaceGuide from './scene/RaceGuide'
-import RiderCamera from './scene/RiderCamera'
+import FollowCamera from './scene/FollowCamera'
 import Runner from './scene/Runner'
 import Tracks from './scene/Tracks'
 import Venue from './scene/Venue'
@@ -43,7 +43,7 @@ export default function App() {
   const [playing, setPlaying] = useState(true)
   const [speedMultiplier, setSpeedMultiplier] = useState(5)
   const [runId, setRunId] = useState(readRunIdFromUrl)
-  const [isRiderView, setIsRiderView] = useState(false)
+  const [viewMode, setViewMode] = useState('overview')
   const traveledRef = useRef(0)
   const remainingRef = useRef(null)
   const elevationRef = useRef(null)
@@ -105,12 +105,13 @@ export default function App() {
           playing={playing}
           speedMultiplier={speedMultiplier}
           traveledRef={traveledRef}
-          hidden={isRiderView}
+          hidden={viewMode === 'rider'}
+          showMarker={viewMode === 'overview'}
           onProgress={handleProgress}
         />
-        {/* 騎手視角接管鏡頭時移除 OrbitControls，回到俯瞰時重新掛上並沿用原本的注視點 */}
-        {isRiderView ? (
-          <RiderCamera run={run} traveledRef={traveledRef} exaggeration={exaggeration} />
+        {/* 跟隨鏡頭接管時移除 OrbitControls，回到俯瞰時重新掛上並沿用原本的注視點 */}
+        {viewMode !== 'overview' ? (
+          <FollowCamera mode={viewMode} run={run} traveledRef={traveledRef} exaggeration={exaggeration} />
         ) : (
           <OrbitControls makeDefault target={CAMERA_TARGET} maxPolarAngle={Math.PI / 2.1} minDistance={40} maxDistance={2500} />
         )}
@@ -127,8 +128,8 @@ export default function App() {
         onExaggerationChange={setExaggeration}
         playing={playing}
         onTogglePlaying={() => setPlaying((p) => !p)}
-        isRiderView={isRiderView}
-        onToggleRiderView={() => setIsRiderView((v) => !v)}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
         speedMultiplier={speedMultiplier}
         onSpeedChange={setSpeedMultiplier}
         remainingRef={remainingRef}

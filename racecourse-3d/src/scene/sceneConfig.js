@@ -19,6 +19,11 @@ export const HEIGHTS = {
   rail: 1.0,
 }
 
+// 跑者角色放大 5 倍（約 8m 高），俯瞰整座競馬場時才看得到
+const AVATAR_SCALE = 5
+const AVATAR_MODEL_HEIGHT = 1.6 // 模型原尺寸身高（m）
+export const AVATAR = { scale: AVATAR_SCALE, height: AVATAR_SCALE * AVATAR_MODEL_HEIGHT }
+
 /** 芝面在取樣點 i 的場景高度 */
 export const turfSurfaceY = (model, i, exaggeration) => model.turfElevation(i) * exaggeration + HEIGHTS.turfLift
 
