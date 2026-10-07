@@ -35,7 +35,7 @@ describe('buildRacePath with a chute', () => {
   const junctionIndex = 180 // 圓上 90°，切線往外即 +x 方向
   const short = [circle[junctionIndex], { x: circle[junctionIndex].x + 100, z: circle[junctionIndex].z }]
   const long = [circle[junctionIndex], { x: circle[junctionIndex].x, z: circle[junctionIndex].z + 300 }]
-  const chute = { junctionIndex, branches: [short, long] }
+  const chute = { branches: [short, long].map((points) => ({ points, junctionIndex })) }
   const junctionRemaining = loop.length - loop.cumulative[junctionIndex]
 
   it('starts on the chute when the distance exceeds the junction', () => {

@@ -4,8 +4,9 @@ import { cumulativeLengths } from './geometry'
  * 賽道量測線（封閉、第 0 點為終點）。
  * @typedef {{ points: Array<{x:number,z:number}>, cumulative: number[], length: number }} Loop
  *
- * 一條跑法：points 依行進順序排列，traveled[k] 為自起點起算的距離，最後一點即終點。
- * @typedef {{ points: Array<{x:number,z:number}>, traveled: number[], length: number }} RacePath
+ * 一條跑法：points 依行進順序排列，traveled[k] 為自起點起算的距離，最後一點即終點；
+ * 前 chuteCount 個點位於引込線上。
+ * @typedef {{ points: Array<{x:number,z:number}>, traveled: number[], length: number, chuteCount: number }} RacePath
  */
 
 /** @returns {Loop} */
@@ -54,7 +55,7 @@ function runAlongLoop(loop, startPosition, distance, prefix = []) {
   }
   points.push(loop.points[k % n])
   const traveled = cumulativeLengths(points, false)
-  return { points, traveled, length: traveled[traveled.length - 1] }
+  return { points, traveled, length: traveled[traveled.length - 1], chuteCount: prefix.length }
 }
 
 /** 從終點出發繞一周回到終點 */
@@ -63,14 +64,14 @@ export const buildLapPath = (loop) => runAlongLoop(loop, 0, loop.length)
 /**
  * 距離 distance 的比賽跑法。依序檢查各引込線：起點若落在其範圍（junctionRemaining < distance ≤ junctionRemaining + 長度），
  * 先沿該引込線跑到匯入點再接環線；都不符合則直接在環線上起跑。
- * @param {{ junctionIndex: number, branches: Array<Array<{x:number,z:number}>> } | null} chute
- *   每條 branch 依「由匯入點往外」排列，第 0 點即環線上第 junctionIndex 點
+ * @param {{ branches: Array<{ points: Array<{x:number,z:number}>, junctionIndex: number }> } | null} chute
+ *   每條 branch 依「由匯入點往外」排列，第 0 點即環線上該 branch 的 junctionIndex 點
  */
 export function buildRacePath(loop, distance, chute = null) {
   if (chute) {
-    const junctionPosition = loop.cumulative[chute.junctionIndex]
-    const onChute = distance - (loop.length - junctionPosition)
-    for (const branch of chute.branches) {
+    for (const { points: branch, junctionIndex } of chute.branches) {
+      const junctionPosition = loop.cumulative[junctionIndex]
+      const onChute = distance - (loop.length - junctionPosition)
       const cumulative = cumulativeLengths(branch, false)
       if (onChute > 0 && onChute <= cumulative[cumulative.length - 1]) {
         const prefix = sliceFromStart(branch, cumulative, onChute)

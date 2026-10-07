@@ -69,7 +69,7 @@ export default function App() {
 
   return (
     <>
-      <Canvas shadows camera={{ position: [-20, 820, 760], fov: 45, near: 1, far: 8000 }}>
+      <Canvas shadows camera={{ position: [-20, 820, 760], fov: 45, near: 5, far: 8000 }}>
         <color attach="background" args={[COLORS.sky]} />
         <fog attach="fog" args={[COLORS.sky, 1800, 5000]} />
         <hemisphereLight args={['#f4f8ff', '#4b6640', 0.9]} />
@@ -102,6 +102,7 @@ export default function App() {
           onProgress={handleProgress}
         />
 
+        {/* near 設 5m 提升深度精度，讓相差數公分的草地與芝面不會互相閃爍 */}
         <OrbitControls makeDefault target={CAMERA_TARGET} maxPolarAngle={Math.PI / 2.1} minDistance={40} maxDistance={2500} />
       </Canvas>
 

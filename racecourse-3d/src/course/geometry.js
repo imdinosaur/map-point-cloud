@@ -194,11 +194,50 @@ export function truncatePolyline(points, length) {
   return result
 }
 
+/** 點是否在封閉環線內（射線法） */
+export function pointInRing({ x, z }, ring) {
+  let inside = false
+  ring.forEach((a, k) => {
+    const b = ring[(k + 1) % ring.length]
+    if (a.z > z !== b.z > z && x < a.x + ((z - a.z) * (b.x - a.x)) / (b.z - a.z)) inside = !inside
+  })
+  return inside
+}
+
+function distanceToRing({ x, z }, ring) {
+  let best = Infinity
+  ring.forEach((a, k) => {
+    const b = ring[(k + 1) % ring.length]
+    const ex = b.x - a.x
+    const ez = b.z - a.z
+    const len2 = ex * ex + ez * ez || 1
+    const t = Math.min(Math.max(((x - a.x) * ex + (z - a.z) * ez) / len2, 0), 1)
+    best = Math.min(best, Math.hypot(x - (a.x + ex * t), z - (a.z + ez * t)))
+  })
+  return best
+}
+
+/** 多邊形內部的規則格點（離各邊至少半格），作為三角化的內部頂點，讓頂面能細緻地跟著 topAt 起伏 */
+function interiorGrid([contour, ...holes], step) {
+  const xs = contour.map((p) => p.x)
+  const zs = contour.map((p) => p.z)
+  const result = []
+  for (let x = Math.min(...xs) + step / 2; x < Math.max(...xs); x += step) {
+    for (let z = Math.min(...zs) + step / 2; z < Math.max(...zs); z += step) {
+      const p = { x, z }
+      if (!pointInRing(p, contour) || holes.some((hole) => pointInRing(p, hole))) continue
+      if ([contour, ...holes].every((ring) => distanceToRing(p, ring) > step / 2)) result.push(p)
+    }
+  }
+  return result
+}
+
 /**
  * 平面多邊形（可含洞）擠出成實體：頂面依 topAt(x, z) 決定高度，外框與洞的邊牆向下延伸到 base。
+ * gridStep > 0 時於內部加入格點（earcut 以單點洞作為內部頂點），避免大三角形把高度拉成平面而與其他物件交錯。
  * @param {Array<Array<Array<{x:number,z:number}>>>} polygons 每個多邊形為 [外框, ...洞]，環線不重複首點
  */
-export function buildSlabGeometry(polygons, topAt, base) {
+export function buildSlabGeometry(polygons, topAt, base, gridStep = 0) {
   const positions = []
   const indices = []
   const pushVertex = (x, y, z) => {
@@ -206,16 +245,17 @@ export function buildSlabGeometry(polygons, topAt, base) {
     return positions.length / 3 - 1
   }
 
-  for (const [contour, ...holes] of polygons) {
-    const rings = [contour, ...holes]
+  for (const polygon of polygons) {
+    const [contour, ...holes] = polygon
+    const steiner = gridStep > 0 ? interiorGrid(polygon, gridStep).map((p) => [p]) : []
     const start = positions.length / 3
-    rings.flat().forEach((p) => pushVertex(p.x, topAt(p.x, p.z), p.z))
+    ;[contour, ...holes, ...steiner].flat().forEach((p) => pushVertex(p.x, topAt(p.x, p.z), p.z))
     const toVec2 = (ring) => ring.map((p) => new THREE.Vector2(p.x, p.z))
-    THREE.ShapeUtils.triangulateShape(toVec2(contour), holes.map(toVec2)).forEach(([a, b, c]) =>
+    THREE.ShapeUtils.triangulateShape(toVec2(contour), [...holes, ...steiner].map(toVec2)).forEach(([a, b, c]) =>
       indices.push(start + a, start + b, start + c),
     )
 
-    for (const ring of rings) {
+    for (const ring of [contour, ...holes]) {
       ring.forEach((p, k) => {
         const q = ring[(k + 1) % ring.length]
         const a = pushVertex(p.x, topAt(p.x, p.z), p.z)
@@ -232,4 +272,34 @@ export function buildSlabGeometry(polygons, topAt, base) {
   geometry.setIndex(indices)
   geometry.computeVertexNormals()
   return geometry
+}
+
+/** 封閉環線等距重新取樣（每段切成不超過 step 公尺），讓沿線高度能逐點計算 */
+export function resampleRing(ring, step) {
+  return ring.flatMap((a, k) => {
+    const b = ring[(k + 1) % ring.length]
+    const count = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / step))
+    return Array.from({ length: count }, (_, s) => ({
+      x: a.x + ((b.x - a.x) * s) / count,
+      z: a.z + ((b.z - a.z) * s) / count,
+    }))
+  })
+}
+
+/** 從 origin 沿單位向量 dir 射出，與封閉環線最近交點的距離；沒有交點時為 Infinity */
+export function rayDistanceToRing(origin, dir, ring) {
+  let nearest = Infinity
+  ring.forEach((a, k) => {
+    const b = ring[(k + 1) % ring.length]
+    const ex = b.x - a.x
+    const ez = b.z - a.z
+    const denom = dir.x * ez - dir.z * ex
+    if (Math.abs(denom) < 1e-12) return
+    const wx = a.x - origin.x
+    const wz = a.z - origin.z
+    const t = (wx * ez - wz * ex) / denom
+    const s = (wx * dir.z - wz * dir.x) / denom
+    if (t > 0 && s >= 0 && s <= 1) nearest = Math.min(nearest, t)
+  })
+  return nearest
 }

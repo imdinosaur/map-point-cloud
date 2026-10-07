@@ -3,11 +3,12 @@ import { DIRT, DIRT_PROFILE, RACE_DISTANCES, STEEPLE, TURF, TURF_PROFILE } from 
 import {
   buildCenterline,
   computeNormals,
-  cumulativeLengths,
   inwardSignOf,
   offsetLine,
   offsetPoint,
   polylineLength,
+  rayDistanceToRing,
+  resampleRing,
 } from './geometry'
 import { elevationAt, fractionFromRemaining, remainingFromFraction } from './profile'
 import { buildLapPath, buildRacePath, createLoop } from './racePath'
@@ -16,10 +17,9 @@ import { buildVenuePolygons } from './venue'
 
 const SAMPLE_COUNT = 1200
 const RAIL_TO_MEASURE_LINE = 1 // 假設距離量測線在內欄外 1m
-const BRANCH_HALF_WIDTH = 10
-const BRANCH_CENTER = -3 // 支線中心往外偏，讓 B〜D コース的跑法也落在路面上
-const VENUE_OVERLAP = 2 // 場地草地伸入芝外緣下方的寬度，避免接縫
-const BRANCH_OVERLAP = 35 // 斜向支線往匯入點方向多畫一段，與ポケット重疊
+const VENUE_OVERLAP = 0.5 // 場地草地伸入芝外緣下方的寬度，避免接縫
+const EDGE_STEP = 5 // 場地邊線取樣間距（m）
+const OUTLINE_INSET = 0.5 // 芝外緣與場地外框保持的距離
 const HOME_STRETCH_TAPER = 80 // 芝寬度由 31m 漸變到 41m 的長度
 
 /**
@@ -97,18 +97,6 @@ export function isValidRunId(id) {
   return RACE_DISTANCES[surface]?.includes(distance) ?? false
 }
 
-/** 路面帶狀實體所需資料：點列、內側法向量、內外緣偏移與每點高度（m） */
-function chuteBand(points, normalSign, inner, outer, remainingAt) {
-  const cumulative = cumulativeLengths(points, false)
-  return {
-    points,
-    normals: computeNormals(points, false, normalSign),
-    inner,
-    outer,
-    elevations: cumulative.map((along) => remainingAt(along)),
-  }
-}
-
 /** 起點處指向跑道外側的單位向量（行進方向的左法向量 × 內側符號，再取反） */
 function outwardAtStart({ points }, inwardSign) {
   const [start, next] = points
@@ -127,7 +115,15 @@ export function createCourseModel() {
 
   const turfElevation = (i) => elevationAt(TURF_PROFILE, remainingFromFraction(fractionOf(i), TURF.length))
   const dirtElevation = (i) => elevationAt(DIRT_PROFILE, remainingFromFraction(fractionOf(i), DIRT.length))
-  const turfOuter = (i) => LAYOUT.turfRail - turfWidthAt(fractionOf(i))
+  // 芝外緣（往外為負）：依直線／彎道寬度，但不超出官方場地外框（例如左上斜切的角落）
+  const outlineWorld = VENUE_OUTLINE.map(toWorld)
+  const turfOuterOffsets = points.map((p, i) => {
+    const outward = { x: -normals[i].x, z: -normals[i].z }
+    const toOutline = rayDistanceToRing(p, outward, outlineWorld) - OUTLINE_INSET
+    const nominal = turfWidthAt(fractionOf(i)) - LAYOUT.turfRail
+    return -Math.min(nominal, toOutline)
+  })
+  const turfOuter = (i) => turfOuterOffsets[i]
 
   /** 剩餘距離 → 中心線取樣索引（各コース以相同比例對應） */
   const indexForRemaining = (remaining, length) =>
@@ -136,32 +132,18 @@ export function createCourseModel() {
   const baseLoop = createLoop(points)
   const junctionIndex = nearestIndex(points, toWorld(CHUTE_LAYOUT.junction))
   const junctionRemaining = baseLoop.length - baseLoop.cumulative[junctionIndex]
-  const chute = buildChute({ points, junctionIndex, junctionRemaining, toWorld }, CHUTE_LAYOUT)
-  const chuteElevationAt = (along) => surfaceElevation('turf', junctionRemaining + along, baseLoop.length)
-
-  // 各支線只畫匯入處以外的部分（往回多畫一段與ポケット重疊），ポケット本身另外畫成芝寬
-  const branchBands = chute.branches.map(({ points: branch, mergeDistance }) => {
-    const cumulative = cumulativeLengths(branch, false)
-    const from = mergeDistance - BRANCH_OVERLAP
-    return chuteBand(
-      branch.filter((_, k) => cumulative[k] >= from),
-      chuteNormalSign,
-      BRANCH_CENTER + BRANCH_HALF_WIDTH,
-      BRANCH_CENTER - BRANCH_HALF_WIDTH,
-      (along) => chuteElevationAt(along + from),
-    )
-  })
-  const chuteBands = [
-    chuteBand(chute.pocket, chuteNormalSign, LAYOUT.turfRail, LAYOUT.turfRail - TURF.widthMin, chuteElevationAt),
-    ...branchBands,
-  ]
+  const remainingAt = (i) => baseLoop.length - baseLoop.cumulative[i]
+  const chute = buildChute({ points, junctionIndex, remainingAt, toWorld }, CHUTE_LAYOUT)
   const branchNormals = chute.branches.map(({ points: branch }) => computeNormals(branch, false, chuteNormalSign))
 
+  // 邊緣重新取樣，讓草地頂面沿邊也能逐點貼合高度
   const venue = buildVenuePolygons({
-    outline: VENUE_OUTLINE.map(toWorld),
+    outline: outlineWorld,
     gaps: VENUE_GAPS.map((gap) => gap.map(toWorld)),
     ovalOuter: points.map((p, i) => offsetPoint(p, normals[i], turfOuter(i) + VENUE_OVERLAP)),
-  })
+  }).map((polygon) => polygon.map((ring) => resampleRing(ring, EDGE_STEP)))
+  /** 場地邊線：平面圖外框與空白三角地的輪廓，重新取樣以便沿線計算高度 */
+  const venueEdges = [outlineWorld, ...VENUE_GAPS.map((gap) => gap.map(toWorld))].map((ring) => resampleRing(ring, EDGE_STEP))
   /** 場地草地的高度：取最近的芝本線取樣點 */
   const venueElevationAt = (x, z) => turfElevation(nearestIndex(points, { x, z }))
 
@@ -176,7 +158,12 @@ export function createCourseModel() {
     const loop = createLoop(offsetLine(points, normals, d))
     const chuteLine =
       surface === 'turf'
-        ? { junctionIndex, branches: chute.branches.map(({ points: branch }, k) => offsetLine(branch, branchNormals[k], d)) }
+        ? {
+            branches: chute.branches.map(({ points: branch, junctionIndex: index }, k) => ({
+              points: offsetLine(branch, branchNormals[k], d),
+              junctionIndex: index,
+            })),
+          }
         : null
     const path = distance === null ? buildLapPath(loop) : buildRacePath(loop, distance, chuteLine)
     return {
@@ -184,7 +171,10 @@ export function createCourseModel() {
       isLap: distance === null,
       distance: path.length,
       path,
-      elevations: path.traveled.map((t) => surfaceElevation(surface, path.length - t, loop.length)),
+      // 引込線段與場地草地共用同一高度函式，發馬機與跑者才會貼在路面上
+      elevations: path.points.map((p, k) =>
+        k < path.chuteCount ? venueElevationAt(p.x, p.z) : surfaceElevation(surface, path.length - path.traveled[k], loop.length),
+      ),
       loopLength: loop.length,
       startOutward: outwardAtStart(path, inwardSign),
     }
@@ -202,8 +192,8 @@ export function createCourseModel() {
     turfOuter,
     indexForRemaining,
     junctionRemaining,
-    chuteBands,
     venue,
+    venueEdges,
     venueElevationAt,
     createRun,
     measureLength,

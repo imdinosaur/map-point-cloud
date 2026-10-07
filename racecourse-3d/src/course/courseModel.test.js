@@ -72,6 +72,32 @@ describe('createRun', () => {
     }
   })
 
+  it('keeps the turf outer edge inside the official venue outline', () => {
+    const outline = model.venueEdges[0]
+    const inside = ({ x, z }) => {
+      let crossings = 0
+      outline.forEach((a, k) => {
+        const b = outline[(k + 1) % outline.length]
+        if (a.z > z !== b.z > z && x < a.x + ((z - a.z) * (b.x - a.x)) / (b.z - a.z)) crossings += 1
+      })
+      return crossings % 2 === 1
+    }
+    const outsideCount = model.points.filter((p, i) => {
+      const d = model.turfOuter(i)
+      return !inside({ x: p.x + model.normals[i].x * d, z: p.z + model.normals[i].z * d })
+    }).length
+    expect(outsideCount).toBe(0)
+  })
+
+  it('uses the venue surface height on chute sections so the gate sits on the grass', () => {
+    for (const id of ['turf-1800', 'turf-2000']) {
+      const { path, elevations } = model.createRun(id, 0)
+      expect(path.chuteCount).toBeGreaterThan(0)
+      const start = path.points[0]
+      expect(elevations[0]).toBeCloseTo(model.venueElevationAt(start.x, start.z))
+    }
+  })
+
   it('fills the venue outside the oval', () => {
     expect(model.venue.length).toBeGreaterThan(0)
   })

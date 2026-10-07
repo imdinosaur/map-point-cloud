@@ -3,9 +3,10 @@ import { DoubleSide } from 'three'
 import { buildSlabGeometry } from '../course/geometry'
 import { COLORS, HEIGHTS } from './sceneConfig'
 
-const BELOW_TURF = 0.1 // 草地略低於芝面，交界處以芝為準
+const GRID_STEP = 8 // 草地內部格點間距（m）
+const BELOW_TURF = 0.03 // 略低於芝面：與芝重疊的窄帶由芝蓋住，又不會露出芝的側牆
 
-/** 依平面圖外框補齊的場地草地（ポケット周邊、角落、走道），跑道本身另外畫在上方 */
+/** 依平面圖外框補齊的場地草地（含各引込線、角落、走道），本線跑道另外畫在上方 */
 export default function Venue({ model, exaggeration, base }) {
   const geometry = useMemo(
     () =>
@@ -13,6 +14,7 @@ export default function Venue({ model, exaggeration, base }) {
         model.venue,
         (x, z) => model.venueElevationAt(x, z) * exaggeration + HEIGHTS.turfLift - BELOW_TURF,
         base,
+        GRID_STEP,
       ),
     [model, exaggeration, base],
   )
@@ -21,12 +23,9 @@ export default function Venue({ model, exaggeration, base }) {
   return (
     <mesh geometry={geometry} receiveShadow>
       <meshStandardMaterial
-        color={COLORS.venue}
+        color={COLORS.turf}
         roughness={1}
         side={DoubleSide}
-        polygonOffset
-        polygonOffsetFactor={4}
-        polygonOffsetUnits={4}
       />
     </mesh>
   )

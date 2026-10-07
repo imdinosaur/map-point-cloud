@@ -3,6 +3,8 @@ import {
   buildBandGeometry,
   buildCenterline,
   buildSlabGeometry,
+  rayDistanceToRing,
+  resampleRing,
   truncatePolyline,
   roundCorners,
   computeNormals,
@@ -118,5 +120,48 @@ describe('buildSlabGeometry', () => {
     const ys = Array.from(geometry.getAttribute('position').array).filter((_, k) => k % 3 === 1)
     expect(Math.max(...ys)).toBe(1)
     expect(Math.min(...ys)).toBe(-2)
+  })
+})
+
+describe('resampleRing', () => {
+  it('splits long edges without repeating the closing point', () => {
+    const ring = [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 10 }, { x: 0, z: 10 }]
+    const result = resampleRing(ring, 2.5)
+    expect(result).toHaveLength(16)
+    expect(result[1]).toEqual({ x: 2.5, z: 0 })
+    expect(polylineLength(result, true)).toBeCloseTo(40)
+  })
+})
+
+describe('rayDistanceToRing', () => {
+  const square = [{ x: -10, z: -10 }, { x: 10, z: -10 }, { x: 10, z: 10 }, { x: -10, z: 10 }]
+
+  it('measures the distance to the nearest edge in the ray direction', () => {
+    expect(rayDistanceToRing({ x: 0, z: 0 }, { x: 1, z: 0 }, square)).toBeCloseTo(10)
+    expect(rayDistanceToRing({ x: 5, z: 0 }, { x: -1, z: 0 }, square)).toBeCloseTo(15)
+  })
+
+  it('returns Infinity when the ray misses the ring', () => {
+    expect(rayDistanceToRing({ x: 20, z: 0 }, { x: 1, z: 0 }, square)).toBe(Infinity)
+  })
+})
+
+describe('buildSlabGeometry with an interior grid', () => {
+  const square = [{ x: 0, z: 0 }, { x: 40, z: 0 }, { x: 40, z: 40 }, { x: 0, z: 40 }]
+
+  it('adds interior vertices so the top follows a curved height function', () => {
+    const coarse = buildSlabGeometry([[square]], () => 0, -1)
+    const fine = buildSlabGeometry([[square]], () => 0, -1, 10)
+    expect(fine.getAttribute('position').count).toBeGreaterThan(coarse.getAttribute('position').count)
+  })
+
+  it('puts every top vertex exactly on topAt', () => {
+    const bowl = (x, z) => ((x - 20) ** 2 + (z - 20) ** 2) / 100
+    const geometry = buildSlabGeometry([[square]], bowl, -50, 10)
+    const pos = geometry.getAttribute('position')
+    for (let k = 0; k < pos.count; k++) {
+      const y = pos.getY(k)
+      if (y !== -50) expect(y).toBeCloseTo(bowl(pos.getX(k), pos.getZ(k)), 4)
+    }
   })
 })

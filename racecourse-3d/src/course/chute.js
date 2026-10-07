@@ -27,48 +27,67 @@ function sampleStraight(from, dir, length) {
   return Array.from({ length: steps + 1 }, (_, k) => advance(from, dir, (length * k) / steps))
 }
 
+/** 環線第 i 點的行進方向（單位向量） */
+function tangentAt(points, i) {
+  const n = points.length
+  const a = points[(i - 1 + n) % n]
+  const b = points[(i + 1) % n]
+  return normalize([b.x - a.x, b.z - a.z])
+}
+
+/** 行進方向最接近 dir 的環線取樣點（直線引込線與環線相切處） */
+function tangentIndex(points, dir) {
+  let best = 0
+  let bestDot = -Infinity
+  points.forEach((_, i) => {
+    const t = tangentAt(points, i)
+    const dot = t.x * dir.x + t.z * dir.z
+    if (dot > bestDot) {
+      best = i
+      bestDot = dot
+    }
+  })
+  return best
+}
+
 /**
- * 依官方起點距離與圖面描線建立 2コーナー奥 的引込線。所有點列皆「由匯入點往外」排列。
- * - pocket：向正面直線沿切線往東延長（1,600m 起點位於此）
- * - branches[0]：內側斜向支線（1,800m）
- * - branches[1]：外側斜向帶 + 南側ポケット（2,000m），以大弧線相接、不經過 1,800m 發走點
- * @param {{ points, junctionIndex: number, junctionRemaining: number, toWorld: Function }} loop
+ * 依官方起點距離與圖面描線建立 2コーナー 周邊的引込線。所有點列皆「由匯入點往外」排列。
+ * - pocket：向正面直線在 junction 沿切線往東延長（1,600m 起點位於此）
+ * - branches[0]：1,800m，與 2コーナー相切的直線，位於本線與空白三角地之間，直接匯入本線
+ * - branches[1]：2,000m，由南側ポケット以大弧線轉入外側斜向帶，再經ポケット匯入向正面
+ * @param {{ points, junctionIndex: number, remainingAt: (i: number) => number, toWorld: Function }} loop
  * @param {typeof import('./tracing').CHUTE_LAYOUT} layout
  */
-export function buildChute({ points, junctionIndex, junctionRemaining, toWorld }, layout) {
-  const n = points.length
+export function buildChute({ points, junctionIndex, remainingAt, toWorld }, layout) {
   const junction = points[junctionIndex]
-  const behind = points[(junctionIndex - 1 + n) % n]
-  const ahead = points[(junctionIndex + 1) % n]
-  const outward = normalize([behind.x - ahead.x, behind.z - ahead.z])
+  const forward = tangentAt(points, junctionIndex)
+  const outward = { x: -forward.x, z: -forward.z }
+  const reach = (distance, index) => distance - remainingAt(index) + START_MARGIN
 
-  const lineOf = ({ through, direction }) => ({ point: toWorld(through), dir: normalize(direction) })
-  const inner = lineOf(layout.diagonal1800)
-  const outer = lineOf(layout.outer2000)
+  const inner = normalize(layout.diagonal1800.direction)
+  const junction1800 = tangentIndex(points, { x: -inner.x, z: -inner.z })
+  const branch1800 = sampleStraight(
+    points[junction1800],
+    inner,
+    reach(CHUTE_STARTS.diagonal, junction1800),
+  )
+
+  const outer = { point: toWorld(layout.outer2000.through), dir: normalize(layout.outer2000.direction) }
   const south = { point: toWorld([layout.pocket2000X, 0]), dir: { x: 0, z: 1 } }
-
-  const merge1800 = intersectParam(junction, outward, inner.point, inner.dir)
   const merge2000 = intersectParam(junction, outward, outer.point, outer.dir)
-  const m1800 = advance(junction, outward, merge1800)
   const m2000 = advance(junction, outward, merge2000)
   const bend2000 = advance(m2000, outer.dir, intersectParam(m2000, outer.dir, south.point, south.dir))
-
-  const reach = (distance) => distance - junctionRemaining + START_MARGIN
-  const branch1800 = truncatePolyline(
-    roundCorners([junction, m1800, advance(m1800, inner.dir, LEG_EXTENT)], MERGE_RADIUS),
-    reach(CHUTE_STARTS.diagonal),
-  )
   const branch2000 = truncatePolyline(
     roundCorners([junction, m2000, bend2000, advance(bend2000, south.dir, LEG_EXTENT)], [MERGE_RADIUS, SWEEP_RADIUS]),
-    reach(CHUTE_STARTS.south),
+    reach(CHUTE_STARTS.south, junctionIndex),
   )
 
   return {
     junctionIndex,
-    pocket: sampleStraight(junction, outward, Math.max(merge1800, merge2000) + POCKET_STUB),
+    pocket: sampleStraight(junction, outward, merge2000 + POCKET_STUB),
     branches: [
-      { points: branch1800, mergeDistance: merge1800 },
-      { points: branch2000, mergeDistance: merge2000 },
+      { points: branch1800, junctionIndex: junction1800, mergeDistance: 0 },
+      { points: branch2000, junctionIndex, mergeDistance: merge2000 },
     ],
   }
 }

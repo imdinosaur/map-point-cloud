@@ -3,8 +3,6 @@ export const COLORS = {
   sky: '#cfe0ea',
   ground: '#56794a',
   turf: '#3f8f3a',
-  turfChute: '#4a9a42',
-  venue: '#4d8a43',
   dirt: '#b7824f',
   steeple: '#6aa356',
   rail: '#f7f7f2',

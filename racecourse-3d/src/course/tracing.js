@@ -35,13 +35,13 @@ export const TURF_INNER_TRACE = [
 /**
  * 2コーナー奥的引込線（皆為圖面座標）：
  * - 向正面直線在 junction 沿切線往東延長成ポケット（1,600m 起點位於此）
- * - 內側斜向支線匯入ポケット（1,800m），沿空白三角區外緣
+ * - 1,800m：與 2コーナー相切的直線，夾在本線與上方空白三角地之間，方向取三角地內側邊
  * - 外側 2,000m：由南側ポケット北上，大弧線轉入外側斜向帶，再併入ポケット；不經過 1,800m 發走點
  * 各起點實際位置由官方距離沿這些線推算（見 chute.js）。
  */
 export const CHUTE_LAYOUT = {
   junction: [400, 70],
-  diagonal1800: { through: [509, 100], direction: [31, 42] },
+  diagonal1800: { direction: [49, 42] },
   outer2000: { through: [521, 100], direction: [29, 42] },
   pocket2000X: 541,
 }

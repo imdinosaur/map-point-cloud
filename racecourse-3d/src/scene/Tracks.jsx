@@ -49,7 +49,20 @@ function Rail({ model, d, top }) {
   return <Line points={points} color={COLORS.rail} lineWidth={1.5} />
 }
 
-/** 芝、ダート、障害三條跑道與引込線，以及內外欄 */
+/** 場地外框與空白三角地的邊線（取代舊的芝外欄，涵蓋各ポケット與走道） */
+function VenueEdges({ model, exaggeration }) {
+  const lines = useMemo(
+    () =>
+      model.venueEdges.map((ring) => {
+        const line = ring.map((p) => [p.x, model.venueElevationAt(p.x, p.z) * exaggeration + HEIGHTS.turfLift + HEIGHTS.rail, p.z])
+        return [...line, line[0]]
+      }),
+    [model, exaggeration],
+  )
+  return lines.map((points, k) => <Line key={k} points={points} color={COLORS.rail} lineWidth={1.5} />)
+}
+
+/** 芝、ダート、障害三條跑道與引込線，以及各邊線 */
 export default function Tracks({ model, railShift, exaggeration, base }) {
   const tops = useMemo(
     () => ({
@@ -82,39 +95,14 @@ export default function Tracks({ model, railShift, exaggeration, base }) {
         base={base}
         color={COLORS.steeple}
       />
-      {model.chuteBands.map((band, k) => (
-        <ChuteBand key={k} band={band} layer={k + 1} exaggeration={exaggeration} base={base} />
-      ))}
 
       <Rail model={model} d={LAYOUT.turfRail - railShift} top={tops.turf} />
-      <Rail model={model} d={model.turfOuter} top={tops.turf} />
       <Rail model={model} d={LAYOUT.dirtRail} top={tops.dirt} />
       <Rail model={model} d={LAYOUT.dirtOuter} top={tops.dirt} />
+      <Rail model={model} d={LAYOUT.steepleRail} top={tops.steeple} />
+      <Rail model={model} d={LAYOUT.steepleOuter} top={tops.steeple} />
+      <VenueEdges model={model} exaggeration={exaggeration} />
     </group>
   )
 }
 
-/** 引込線（ポケット／斜向支線），layer 越大越往後畫，避免與本線或彼此重疊處閃爍 */
-function ChuteBand({ band, layer, exaggeration, base }) {
-  const fns = useMemo(
-    () => ({
-      inner: () => band.inner,
-      outer: () => band.outer,
-      top: (k) => band.elevations[k] * exaggeration + HEIGHTS.turfLift,
-    }),
-    [band, exaggeration],
-  )
-  return (
-    <Band
-      closed={false}
-      points={band.points}
-      normals={band.normals}
-      inner={fns.inner}
-      outer={fns.outer}
-      top={fns.top}
-      base={base}
-      layer={layer}
-      color={COLORS.turfChute}
-    />
-  )
-}
