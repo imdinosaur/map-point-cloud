@@ -1,10 +1,12 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Quaternion, Vector3 } from 'three'
 import { useFrame, useLoader } from '@react-three/fiber'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
-import { applyWind, setupAvatarPhysics } from './avatarPhysics'
+import { WIND, applyExternalForces, setupAvatarPhysics, swayRateFor, windGainFor } from './avatarPhysics'
+import { createInertiaTracker } from './inertia'
 import { RUN_BONES, cadenceFor, runPose, standPose, toVrm0 } from './runCycle'
+import { MAX_FRAME_DELTA } from './sceneConfig'
 
 const MODEL_URL = `${import.meta.env.BASE_URL}models/runner.vrm`
 const BOB_HEIGHT = 0.06 // 每步上下起伏（模型原尺寸，公尺）
@@ -13,11 +15,9 @@ const MAX_PHYSICS_DELTA = 1 / 30 // 分頁切回時 delta 很大，物理會一�
 const WARMUP_DELTA = 1 / 60
 const WARMUP_STEPS = 90 // 約 1.5 秒
 const STAND_POSE = standPose()
-// 跑步迎面風：物理以角色自身為中心（不受跑速影響），改用風力表現「正在跑」
-const WIND = 0.3 // 速度 ×1 時的風力（模型原尺寸，與 gravityPower 同單位）
-const MAX_WIND_GAIN = 1.5 // 高倍速時風力上限，避免頭髮、裙子被吹成水平
 const WIND_EASE = 3 // 起跑、停下時風力漸變速度
 const worldQuaternion = new Quaternion()
+const worldPosition = new Vector3()
 const back = new Vector3()
 
 const withVrmPlugin = (loader) => loader.register((parser) => new VRMLoaderPlugin(parser))
@@ -70,11 +70,12 @@ function applyPose(vrm, phase, moving) {
   vrm.scene.position.y = moving ? Math.abs(Math.sin(phase)) * BOB_HEIGHT : 0
 }
 
-/** 依角色在世界中的朝向，把迎面風吹向身後 */
-function blowWind(vrm, group, strength, time) {
+/** 依角色在世界中的位置與朝向，套用迎面風（吹向身後）與慣性 */
+function applyForces(vrm, group, { windUnit, windGain, tracker, dt, timeScale, swayTime }) {
   group.getWorldQuaternion(worldQuaternion)
   back.set(0, 0, -1).applyQuaternion(worldQuaternion).setY(0).normalize() // 角色面向 +Z，身後為 -Z
-  applyWind(vrm.springBoneManager, back, strength, time)
+  const inertia = tracker.update(group.getWorldPosition(worldPosition), dt, timeScale)
+  applyExternalForces(vrm.springBoneManager, { back, windUnit, windGain, inertia, swayTime })
 }
 
 /**
@@ -85,21 +86,32 @@ export default function RunnerAvatar({ scale, speedMultiplier, movingRef }) {
   const vrm = useLoader(GLTFLoader, MODEL_URL, withVrmPlugin).userData.vrm
   const groupRef = useRef(null)
   const phaseRef = useRef(0)
-  const windRef = useRef(0)
+  const windGainRef = useRef(0)
+  const swayTimeRef = useRef(0)
+  const tracker = useMemo(() => createInertiaTracker(), [])
 
   useEffect(() => {
     prepare(vrm, scale)
     settlePhysics(vrm, groupRef.current)
   }, [vrm, scale])
 
-  useFrame(({ clock }, delta) => {
+  useFrame((_, delta) => {
     const moving = movingRef.current
     if (moving) phaseRef.current = (phaseRef.current + delta * cadenceFor(speedMultiplier) * TWO_PI) % TWO_PI
     applyPose(vrm, phaseRef.current, moving)
 
-    const targetWind = moving ? WIND * scale * Math.min(Math.sqrt(speedMultiplier), MAX_WIND_GAIN) : 0
-    windRef.current += (targetWind - windRef.current) * (1 - Math.exp(-WIND_EASE * delta))
-    blowWind(vrm, groupRef.current, windRef.current, clock.elapsedTime)
+    const targetGain = moving ? windGainFor(speedMultiplier) : 0
+    windGainRef.current += (targetGain - windGainRef.current) * (1 - Math.exp(-WIND_EASE * delta))
+    // 陣風時間自行累加：直接用 時間×倍率 的話，改變速度時相位會跳動
+    swayTimeRef.current += delta * swayRateFor(speedMultiplier)
+    applyForces(vrm, groupRef.current, {
+      windUnit: WIND.strength * scale,
+      windGain: windGainRef.current,
+      tracker,
+      dt: Math.min(delta, MAX_FRAME_DELTA), // 與 Runner 移動用同一個上限，否則切回分頁會誤判成急停
+      timeScale: speedMultiplier,
+      swayTime: swayTimeRef.current,
+    })
 
     vrm.update(Math.min(delta, MAX_PHYSICS_DELTA)) // 套用 normalized 骨骼、裙子頭髮尾巴的 spring bone
   })

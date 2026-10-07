@@ -31,5 +31,8 @@ export const turfSurfaceY = (model, i, exaggeration) => model.turfElevation(i) *
 export const surfaceY = (surface, elevation, exaggeration) =>
   elevation * exaggeration + (surface === 'dirt' ? HEIGHTS.dirtLift : HEIGHTS.turfLift)
 
+/** 分頁切回時 delta 可能很大，限制單幀推進量（秒）；跑者移動與慣性計算共用 */
+export const MAX_FRAME_DELTA = 0.1
+
 /** 約 2400m 跑 2 分 24 秒的平均速度（m/s） */
 export const RACE_SPEED = 16.7

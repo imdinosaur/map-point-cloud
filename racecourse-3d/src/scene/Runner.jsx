@@ -3,13 +3,12 @@ import { useFrame } from '@react-three/fiber'
 import { lookAheadSpan } from '../course/racePath'
 import FallbackBoundary from './FallbackBoundary'
 import RunnerAvatar from './RunnerAvatar'
-import { AVATAR, COLORS, RACE_SPEED } from './sceneConfig'
+import { AVATAR, COLORS, MAX_FRAME_DELTA, RACE_SPEED } from './sceneConfig'
 import { runPositionAt } from './runPosition'
 
 const BODY_RADIUS = 2.5 // 模型載入前或缺少模型時的替代球
 const MARKER_HEIGHT = AVATAR.height + 6 // 頭上的倒三角標記，俯瞰時用來找到跑者
 const HEADING_SPAN = 4 // 取前方幾公尺決定面向
-const MAX_FRAME_DELTA = 0.1 // 分頁切回時 delta 可能很大，限制單幀推進量
 const FINISH_HOLD = 1.5 // 跑完一場後在終點停留秒數
 
 /**
