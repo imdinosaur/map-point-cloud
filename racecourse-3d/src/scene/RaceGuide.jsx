@@ -1,14 +1,28 @@
 import { useMemo } from 'react'
 import { Html, Line } from '@react-three/drei'
+import { Matrix4, Quaternion, Vector3 } from 'three'
 import { LAYOUT } from '../course/courseModel'
+import { GATE, GATE_WIDTH } from '../course/startingGate'
 import { COLORS, surfaceY } from './sceneConfig'
+import StartingGate from './StartingGate'
 
 const ROUTE_LIFT = 0.6
-const GATE_WIDTH = 28
-const GATE_DEPTH = 3
-const GATE_HEIGHT = 4
-// 發馬機內側（1 番）貼著內欄，往外側展開；量測線在內欄外 LAYOUT.turfRail 公尺
-const GATE_CENTER_OFFSET = GATE_WIDTH / 2 - LAYOUT.turfRail
+
+/**
+ * 發馬機的擺放：原點在起跑線與內欄交點（量測線往內 LAYOUT.turfRail 公尺），局部 x 指向外側。
+ * 為保持右手座標，局部 z = x × y；forward 記錄行進方向落在 +z 或 -z。
+ */
+function gatePlacement(start, next, out, y) {
+  const xAxis = new Vector3(out.x, 0, out.z)
+  const yAxis = new Vector3(0, 1, 0)
+  const zAxis = new Vector3().crossVectors(xAxis, yAxis)
+  const forward = Math.sign((next.x - start.x) * zAxis.x + (next.z - start.z) * zAxis.z) || 1
+  return {
+    position: [start.x - out.x * LAYOUT.turfRail, y, start.z - out.z * LAYOUT.turfRail],
+    quaternion: new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(xAxis, yAxis, zAxis)),
+    forward,
+  }
+}
 
 const labelStyle = {
   font: '700 12px/1 system-ui, sans-serif',
@@ -41,29 +55,17 @@ export default function RaceGuide({ run, exaggeration }) {
     const { points } = run.path
     const route = points.map((p, k) => [p.x, surfaceY(run.surface, run.elevations[k], exaggeration) + ROUTE_LIFT, p.z])
     const [start, next] = points
-    const { startOutward: out } = run
-    return {
-      route,
-      gate: [
-        start.x + out.x * GATE_CENTER_OFFSET,
-        surfaceY(run.surface, run.elevations[0], exaggeration),
-        start.z + out.z * GATE_CENTER_OFFSET,
-      ],
-      // 發馬機橫跨跑道，長邊與行進方向垂直
-      rotation: -Math.atan2(next.z - start.z, next.x - start.x) + Math.PI / 2,
-    }
+    const y = surfaceY(run.surface, run.elevations[0], exaggeration)
+    return { route, gate: gatePlacement(start, next, run.startOutward, y) }
   }, [run, exaggeration])
 
   if (!guide) return null
   return (
     <group>
       <Line points={guide.route} color={COLORS.route} lineWidth={3} transparent opacity={0.85} />
-      <group position={guide.gate} rotation={[0, guide.rotation, 0]}>
-        <mesh position={[0, GATE_HEIGHT / 2, 0]} castShadow>
-          <boxGeometry args={[GATE_WIDTH, GATE_HEIGHT, GATE_DEPTH]} />
-          <meshStandardMaterial color={COLORS.gate} roughness={0.6} />
-        </mesh>
-        <Html position={[0, GATE_HEIGHT, 0]} center zIndexRange={[10, 0]}>
+      <group position={guide.gate.position} quaternion={guide.gate.quaternion}>
+        <StartingGate forward={guide.gate.forward} />
+        <Html position={[GATE_WIDTH / 2, GATE.height, (-guide.gate.forward * GATE.depth) / 2]} center zIndexRange={[10, 0]}>
           <div style={pinStyle}>
             <span style={labelStyle}>
               {SURFACE_LABEL[run.surface]} {Math.round(run.distance).toLocaleString()}m スタート

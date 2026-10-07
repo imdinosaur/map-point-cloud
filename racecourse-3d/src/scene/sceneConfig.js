@@ -12,7 +12,6 @@ export const COLORS = {
   furlong: '#f2c230',
   runner: '#e2412f',
   route: '#ffe14d',
-  gate: '#fafafa',
 }
 
 // 實際尺寸（公尺，不受高度誇張倍率影響）
