@@ -19,10 +19,15 @@ export const HEIGHTS = {
   rail: 1.0,
 }
 
-// 跑者角色放大 5 倍（約 8m 高），俯瞰整座競馬場時才看得到
-const AVATAR_SCALE = 5
+// 跑者角色：模型原尺寸（約 1.6m），與實際尺寸的跑道、護欄（1m）同比例；俯瞰時靠頭上的倒三角標記找到她
+const AVATAR_SCALE = 1
 const AVATAR_MODEL_HEIGHT = 1.6 // 模型原尺寸身高（m）
-export const AVATAR = { scale: AVATAR_SCALE, height: AVATAR_SCALE * AVATAR_MODEL_HEIGHT }
+const EYE_RATIO = 0.93 // 眼睛高度約為身高的 93%
+export const AVATAR = {
+  scale: AVATAR_SCALE,
+  height: AVATAR_SCALE * AVATAR_MODEL_HEIGHT,
+  eyeHeight: AVATAR_SCALE * AVATAR_MODEL_HEIGHT * EYE_RATIO,
+}
 
 /** 芝面在取樣點 i 的場景高度 */
 export const turfSurfaceY = (model, i, exaggeration) => model.turfElevation(i) * exaggeration + HEIGHTS.turfLift

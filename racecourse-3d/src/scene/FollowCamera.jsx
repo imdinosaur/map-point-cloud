@@ -14,9 +14,17 @@ const NEAR = 0.5 // 近平面拉近才看得到腳下的芝；離開時還原俯
  * chase：追跡，鏡頭在跑者後上方，看著角色。
  */
 const MODES = {
-  rider: { fov: 70, back: 0, side: 0, up: 2.6, lookUp: 2.6, lookAtRunner: false },
-  // 跑者沿內欄跑，鏡頭往外側偏，才不會穿過內欄邊的弗隆標柱
-  chase: { fov: 55, back: 24, side: 7, up: AVATAR.height * 1.2, lookUp: AVATAR.height * 0.6, lookAtRunner: true },
+  // 騎手目線：角色的眼睛高度
+  rider: { fov: 70, back: 0, side: 0, up: AVATAR.eyeHeight, lookUp: AVATAR.eyeHeight, lookAtRunner: false },
+  // 追跡：距離與高度依角色身高決定。跑者沿內欄跑，鏡頭往外側偏，才不會穿過內欄邊的弗隆標柱
+  chase: {
+    fov: 55,
+    back: AVATAR.height * 4,
+    side: AVATAR.height * 1.5,
+    up: AVATAR.height * 1.3,
+    lookUp: AVATAR.height * 0.6,
+    lookAtRunner: true,
+  },
 }
 // 平滑的是「方向」而非位置：位置若用 lerp 追，高倍速時鏡頭會落後數十公尺
 const SMOOTHING = 6 // 方向追隨速度（越大越緊），避免在折線頂點處突然轉向
