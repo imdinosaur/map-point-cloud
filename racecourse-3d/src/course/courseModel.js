@@ -11,11 +11,13 @@ import {
   resampleRing,
 } from './geometry'
 import { elevationAt, fractionFromRemaining, remainingFromFraction } from './profile'
-import { buildLapPath, buildRacePath, createLoop, laneFrame } from './racePath'
+import { FIELD } from './field'
+import { buildLapPath, buildRacePath, createLoop, laneFrame, withRunout } from './racePath'
 import { CHUTE_LAYOUT, TURF_INNER_TRACE, VENUE_GAPS, VENUE_OUTLINE } from './tracing'
 import { buildVenuePolygons } from './venue'
 
 const SAMPLE_COUNT = 1200
+const RUNOUT = FIELD.runoutMax + 50 // 比賽跑法在終點後多接的路線長度，涵蓋最遠的停止位置與鏡頭前視
 const RAIL_TO_MEASURE_LINE = 1 // 假設距離量測線在內欄外 1m
 const VENUE_OVERLAP = 0.5 // 場地草地伸入芝外緣下方的寬度，避免接縫
 const EDGE_STEP = 5 // 場地邊線取樣間距（m）
@@ -167,18 +169,18 @@ export function createCourseModel() {
             })),
           }
         : null
-    const path = distance === null ? buildLapPath(loop) : buildRacePath(loop, distance, chuteLine)
+    const path = distance === null ? buildLapPath(loop) : withRunout(buildRacePath(loop, distance, chuteLine), loop, RUNOUT)
     const startOutward = outwardAtStart(path, inwardSign)
     // 多頭數比賽時各馬沿路線往外偏移；outward 為每點外側法向量、curvatureAt 為沿線曲率
     const { outward, curvatureAt } = laneFrame(path, startOutward)
     return {
       surface,
       isLap: distance === null,
-      distance: path.length,
+      distance: path.finish, // 起點到終點；path.length 另含過終點後的減速區段
       path,
-      // 引込線段與場地草地共用同一高度函式，發馬機與跑者才會貼在路面上
+      // 引込線段與場地草地共用同一高度函式，發馬機與跑者才會貼在路面上（過終點後剩餘距離為負，環線上照樣換算）
       elevations: path.points.map((p, k) =>
-        k < path.chuteCount ? venueElevationAt(p.x, p.z) : surfaceElevation(surface, path.length - path.traveled[k], loop.length),
+        k < path.chuteCount ? venueElevationAt(p.x, p.z) : surfaceElevation(surface, path.finish - path.traveled[k], loop.length),
       ),
       loopLength: loop.length,
       startOutward,

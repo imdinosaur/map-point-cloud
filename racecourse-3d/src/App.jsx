@@ -65,6 +65,7 @@ export default function App() {
   const traveledRef = useRef(0)
   const lateralRef = useRef(0)
   const playerMovingRef = useRef(false)
+  const playerPaceRef = useRef(1) // 玩家目前速度 ÷ 標準跑速：跑步動作隨起跑加速、過終點減速
   const rankingStore = useMemo(() => createRankingStore(), [])
   const trackerRef = useRef(null) // 位置追蹤條的每幀更新函式，由 PositionTracker 註冊、Field 呼叫
   const surfaceMaterials = useSurfaceMaterials()
@@ -80,7 +81,7 @@ export default function App() {
   const replay = useMemo(() => {
     const race = raceById(replayId)
     if (!race) return null
-    return buildReplay(race, { length: run.path.length, cornerDistances: findCornerDistances(run.curvatureAt, run.path.length) })
+    return buildReplay(race, { length: run.distance, cornerDistances: findCornerDistances(run.curvatureAt, run.distance) })
   }, [replayId, run])
 
   const changeSelection = useCallback((next) => {
@@ -144,6 +145,7 @@ export default function App() {
             traveledRef={traveledRef}
             lateralRef={lateralRef}
             playerMovingRef={playerMovingRef}
+            playerPaceRef={playerPaceRef}
             rankingStore={rankingStore}
           />
         )}
@@ -156,6 +158,7 @@ export default function App() {
           lateralRef={lateralRef}
           driven={!run.isLap}
           drivenMovingRef={playerMovingRef}
+          drivenPaceRef={playerPaceRef}
           hidden={viewMode === 'rider'}
           showMarker={viewMode === 'overview'}
           onProgress={handleProgress}

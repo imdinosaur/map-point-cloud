@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildLapPath, buildRacePath, createLoop, lookAheadSpan, loopPositionFor, pointAlong } from './racePath'
+import { buildLapPath, buildRacePath, createLoop, lookAheadSpan, loopPositionFor, pointAlong, withRunout } from './racePath'
 
 // 半徑 100 的圓，第 0 點為終點
 const circle = Array.from({ length: 720 }, (_, i) => {
@@ -77,5 +77,16 @@ describe('lookAheadSpan', () => {
 
   it('wraps past the goal on a continuous lap', () => {
     expect(lookAheadSpan(1000, 990, true, 30)).toEqual({ from: 990, to: 20 })
+  })
+})
+
+describe('withRunout', () => {
+  it('continues along the loop past the goal and remembers where the goal is', () => {
+    const race = buildRacePath(loop, 500)
+    const path = withRunout(race, loop, 120)
+    expect(path.finish).toBeCloseTo(race.length)
+    expect(path.length - path.finish).toBeGreaterThanOrEqual(120)
+    expect(path.points[race.points.length - 1]).toEqual(circle[0])
+    expect(path.points[race.points.length]).toEqual(circle[1])
   })
 })

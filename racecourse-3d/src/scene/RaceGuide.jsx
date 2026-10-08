@@ -52,8 +52,10 @@ const stemStyle = { width: 2, height: STEM_HEIGHT, background: COLORS.route, box
 export default function RaceGuide({ run, exaggeration }) {
   const guide = useMemo(() => {
     if (run.isLap) return null
-    const { points } = run.path
-    const route = points.map((p, k) => [p.x, surfaceY(run.surface, run.elevations[k], exaggeration) + ROUTE_LIFT, p.z])
+    const { points, traveled } = run.path
+    const route = points
+      .filter((_, k) => traveled[k] <= run.distance + 1e-6) // 只畫到終點，不含過終點後的減速區段
+      .map((p, k) => [p.x, surfaceY(run.surface, run.elevations[k], exaggeration) + ROUTE_LIFT, p.z])
     const [start, next] = points
     const y = surfaceY(run.surface, run.elevations[0], exaggeration)
     return { route, gate: gatePlacement(start, next, run.startOutward, y) }

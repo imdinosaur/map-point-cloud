@@ -1,14 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { CanvasTexture, Color, MeshStandardMaterial, Object3D, SRGBColorSpace, SphereGeometry } from 'three'
-import { createField, rankings, stepField } from '../course/field'
+import { createField, isSettled, rankings, stepField } from '../course/field'
 import { WAKU_COLORS, WAKU_TEXT_COLORS } from '../course/startingGate'
 import { numberPatchGeometry } from './numberPatch'
-import { MAX_FRAME_DELTA } from './sceneConfig'
+import { MAX_FRAME_DELTA, RACE_SPEED } from './sceneConfig'
 import { runPositionAt } from './runPosition'
 
 const BALL_RADIUS = 0.4 // 其他出走馬以枠色的球代替（直徑 0.8m，與 1.6m 的角色相襯）
-const FINISH_HOLD = 3 // 全員到終點後停留秒數，再開始下一場
+const FINISH_HOLD = 3 // 全員過終點並停下後停留秒數，再開始下一場
 const PUBLISH_INTERVAL = 0.2 // 名次發布間隔（秒）
 const MOVING_SPEED = 0.5 // 速度高於此值才算在跑（m/s）
 
@@ -51,7 +51,7 @@ function simulationSource(course) {
 }
 
 function replaySource(replay) {
-  return { create: () => replay.at(0), step: (state, dt) => replay.at(Math.min(state.time + dt, replay.duration + 1)) }
+  return { create: () => replay.at(0), step: (state, dt) => replay.at(Math.min(state.time + dt, replay.settledAt + 1)) }
 }
 
 /**
@@ -69,10 +69,11 @@ export default function Field({
   traveledRef,
   lateralRef,
   playerMovingRef,
+  playerPaceRef,
   rankingStore,
 }) {
   const source = useMemo(
-    () => (replay ? replaySource(replay) : simulationSource({ length: run.path.length, curvatureAt: run.curvatureAt })),
+    () => (replay ? replaySource(replay) : simulationSource({ length: run.distance, curvatureAt: run.curvatureAt })),
     [replay, run],
   )
   const initial = useMemo(() => source.create(0), [source])
@@ -101,7 +102,7 @@ export default function Field({
     const dt = Math.min(delta, MAX_FRAME_DELTA)
     let field = fieldRef.current
     if (playing) field = source.step(field, dt * speedMultiplier)
-    if (field.finishOrder.length === field.runners.length) {
+    if (isSettled(field)) {
       holdRef.current += dt
       if (holdRef.current >= FINISH_HOLD) {
         roundRef.current += 1 // 模擬：下一場換一組出走馬；再現：重播同一場
@@ -115,6 +116,7 @@ export default function Field({
     traveledRef.current = player.traveled
     lateralRef.current = player.lateral
     playerMovingRef.current = playing && player.speed > MOVING_SPEED
+    playerPaceRef.current = player.speed / RACE_SPEED
 
     placeBalls(ballsRef.current, labelsRef.current, field, run, exaggeration, player.number)
     trackerRef.current?.(field, player.number)

@@ -46,6 +46,7 @@ function createStandClip(vrm, runClips) {
  * @param {{ slow: import('three').AnimationClip, fast: import('three').AnimationClip }} clips 已 retarget 的動作
  */
 export function createRunAnimator(vrm, { slow, fast }) {
+  vrm.scene.position.y = 0 // 清掉程序式動作的上下起伏；之後的起伏由動作的 hips 位移帶出
   const mixer = new AnimationMixer(vrm.scene)
   const slowAction = mixer.clipAction(slow).play()
   const fastAction = mixer.clipAction(fast).play()

@@ -4,9 +4,10 @@ import { computeNormals, cumulativeLengths } from './geometry'
  * 賽道量測線（封閉、第 0 點為終點）。
  * @typedef {{ points: Array<{x:number,z:number}>, cumulative: number[], length: number }} Loop
  *
- * 一條跑法：points 依行進順序排列，traveled[k] 為自起點起算的距離，最後一點即終點；
+ * 一條跑法：points 依行進順序排列，traveled[k] 為自起點起算的距離；finish 為終點的已跑距離，
+ * 之後可能還接著過終點後減速用的一段（見 withRunout），所以 length ≥ finish。
  * 前 chuteCount 個點位於引込線上。
- * @typedef {{ points: Array<{x:number,z:number}>, traveled: number[], length: number, chuteCount: number }} RacePath
+ * @typedef {{ points: Array<{x:number,z:number}>, traveled: number[], length: number, finish: number, chuteCount: number }} RacePath
  */
 
 /** @returns {Loop} */
@@ -55,7 +56,28 @@ function runAlongLoop(loop, startPosition, distance, prefix = []) {
   }
   points.push(loop.points[k % n])
   const traveled = cumulativeLengths(points, false)
-  return { points, traveled, length: traveled[traveled.length - 1], chuteCount: prefix.length }
+  const length = traveled[traveled.length - 1]
+  return { points, traveled, length, finish: length, chuteCount: prefix.length }
+}
+
+/**
+ * 終點後沿環線再接約 runout 公尺，讓跑者過終點後有路可以減速停下。
+ * 比賽跑法的最後一點即環線第 0 點（終點），從第 1 點接下去。
+ * @param {RacePath} path
+ * @returns {RacePath}
+ */
+export function withRunout(path, loop, runout) {
+  const n = loop.points.length
+  const points = [...path.points]
+  let extra = 0
+  for (let k = 1; extra < runout; k++) {
+    const next = loop.points[k % n]
+    const last = points[points.length - 1]
+    extra += Math.hypot(next.x - last.x, next.z - last.z)
+    points.push(next)
+  }
+  const traveled = cumulativeLengths(points, false)
+  return { ...path, points, traveled, length: traveled[traveled.length - 1], finish: path.finish }
 }
 
 /** 從終點出發繞一周回到終點 */

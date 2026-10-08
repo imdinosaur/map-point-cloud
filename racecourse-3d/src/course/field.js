@@ -21,6 +21,8 @@ export const FIELD = {
   decel: 4,
   lateBlend: 200, // 由道中速度漸變到末腳速度的距離
   substep: 0.05, // 模擬步長上限（秒），高倍速時分段計算避免穿越
+  runoutMin: 60, // 過終點後減速停下的距離（m）：每頭馬在此範圍內隨機，才不會停在同一條線上
+  runoutMax: 180,
 }
 
 /**
@@ -38,9 +40,11 @@ export const STYLES = {
 }
 const STYLE_KEYS = Object.keys(STYLES)
 const STYLE_WEIGHTS = [0.15, 0.35, 0.35, 0.15] // 逃げ、追込較少
+const STOP_SEED_SALT = 0x9e3779b9 // 停止距離用另一組亂數，加入時不改變既有的出走馬組成
+const STOPPED = 0.05 // 離停止點這麼近（m）就算停下
 
 /** 可重現的亂數（mulberry32） */
-function createRandom(seed) {
+export function createRandom(seed) {
   let state = seed >>> 0
   return () => {
     state = (state + 0x6d2b79f5) >>> 0
@@ -67,10 +71,11 @@ export const stallLateral = (number) => GATE.endFrame + (number - 0.5) * GATE.pi
  * @param {{ seed: number, count?: number }} options
  * @returns {{ seed: number, time: number, runners: Runner[], finishOrder: number[] }}
  * @typedef {{ number: number, waku: number, style: string, label: string, ability: number, preferredLateral: number,
- *   traveled: number, lateral: number, speed: number, finishedAt: number | null }} Runner
+ *   traveled: number, lateral: number, speed: number, finishedAt: number | null, stopAfter: number }} Runner
  */
 export function createField({ seed, count = FIELD.runners }) {
   const random = createRandom(seed)
+  const stopRandom = createRandom(seed ^ STOP_SEED_SALT)
   const runners = Array.from({ length: count }, (_, k) => {
     const style = pickStyle(random)
     return {
@@ -84,9 +89,25 @@ export function createField({ seed, count = FIELD.runners }) {
       lateral: stallLateral(k + 1),
       speed: 0,
       finishedAt: null,
+      stopAfter: pickStopAfter(stopRandom),
     }
   })
   return { seed, time: 0, runners, finishOrder: [] }
+}
+
+/** 過終點後減速停下的距離（m） */
+export const pickStopAfter = (random) => FIELD.runoutMin + random() * (FIELD.runoutMax - FIELD.runoutMin)
+
+/**
+ * 以等減速度 v²/(2s) 在 s 公尺內停下：過終點 elapsed 秒後多跑的距離與當時速度。
+ * @param {number} speed 過終點時的速度（m/s）
+ * @param {number} stopAfter s
+ */
+export function coastAfterFinish(speed, stopAfter, elapsed) {
+  if (speed <= 0 || stopAfter <= 0) return { distance: 0, speed: 0 }
+  const decel = (speed * speed) / (2 * stopAfter)
+  const t = Math.min(elapsed, speed / decel)
+  return { distance: speed * t - (decel * t * t) / 2, speed: speed - decel * t }
 }
 
 /** 末段進度：0 = 道中、1 = 已完全進入末腳 */
@@ -128,7 +149,7 @@ const approach = (value, target, maxStep) => value + Math.min(Math.max(target - 
 
 /** 一頭馬前進一小步；others 為這一步開始時的快照，所有馬依同一快照決策，結果與順序無關 */
 function stepRunner(runner, others, dt, course, time) {
-  if (!isRunning(runner)) return { ...runner, speed: approach(runner.speed, 0, FIELD.decel * dt) }
+  if (!isRunning(runner)) return coastToStop(runner, dt, course)
 
   const desired = targetSpeed(runner, course.length - runner.traveled)
   const blocker = blockerAhead(runner, others)
@@ -159,6 +180,20 @@ function stepRunner(runner, others, dt, course, time) {
   const finishedAt = traveled >= course.length ? time + dt : null
   return { ...runner, traveled, lateral: nextLateral, speed, finishedAt }
 }
+
+/** 過終點後沿原本的線往前減速，停在終點後 stopAfter 公尺；每步依剩餘距離重算減速度，誤差會自行收斂 */
+function coastToStop(runner, dt, course) {
+  const stopAt = course.length + runner.stopAfter
+  const left = stopAt - runner.traveled
+  if (left <= STOPPED || runner.speed <= 0) return runner.speed === 0 ? runner : { ...runner, speed: 0 }
+  const { distance, speed } = coastAfterFinish(runner.speed, left, dt)
+  const stretch = Math.max(0.5, 1 + course.curvatureAt(runner.traveled) * runner.lateral)
+  return { ...runner, traveled: Math.min(runner.traveled + distance / stretch, stopAt), speed }
+}
+
+/** 全員都已過終點並停下（可以開始下一場） */
+export const isSettled = (field) =>
+  field.finishOrder.length === field.runners.length && field.runners.every((runner) => runner.speed < 1e-6)
 
 /**
  * 推進整個馬群。dt 大於 FIELD.substep 時分段計算。

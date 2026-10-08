@@ -84,8 +84,9 @@ function applyForces(vrm, group, { windUnit, windGain, tracker, dt, timeScale, s
  * VRM 跑者。需包在 <Suspense> 內。
  * 有 Mixamo 跑步動作（public/animations/*.fbx）時用動作檔，否則用程序式動作。
  * movingRef.current 為 false 時（暫停、終點停留）停在原地站立。
+ * paceRef.current 為目前速度 ÷ 標準跑速：起跑加速、過終點減速時步頻跟著變，慢下來會換成較慢的跑法。
  */
-export default function RunnerAvatar({ scale, speedMultiplier, movingRef }) {
+export default function RunnerAvatar({ scale, speedMultiplier, movingRef, paceRef }) {
   const vrm = useLoader(GLTFLoader, MODEL_URL, withVrmPlugin).userData.vrm
   const groupRef = useRef(null)
   const phaseRef = useRef(0)
@@ -104,11 +105,11 @@ export default function RunnerAvatar({ scale, speedMultiplier, movingRef }) {
 
   useFrame((_, delta) => {
     const moving = movingRef.current
+    const gait = speedMultiplier * paceRef.current // 畫面上實際的跑速倍率
     if (animator) {
-      animator.update(delta, { moving, speedMultiplier })
-      vrm.scene.position.y = 0 // 上下起伏已在動作的 hips 位移裡
+      animator.update(delta, { moving, speedMultiplier: gait })
     } else {
-      if (moving) phaseRef.current = (phaseRef.current + delta * cadenceFor(speedMultiplier) * TWO_PI) % TWO_PI
+      if (moving) phaseRef.current = (phaseRef.current + delta * cadenceFor(gait) * TWO_PI) % TWO_PI
       applyPose(vrm, phaseRef.current, moving)
     }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildReplay, findCornerDistances, parseCornerOrder, parseMargin, parseTime } from './replay'
 import { JAPAN_CUP_2023 } from './races/japanCup2023'
+import { FIELD } from './field'
 
 const LENGTH = 2.4 // 1 馬身（m）
 
@@ -102,5 +103,28 @@ describe('buildReplay with the 2023 Japan Cup', () => {
 
   it('labels each runner with its horse name', () => {
     expect(horse(2).label).toBe('イクイノックス')
+  })
+})
+
+describe('buildReplay after the finish', () => {
+  const replay = buildReplay(JAPAN_CUP_2023, { length: 2400, cornerDistances: [350, 650, 1500, 1800] })
+
+  it('carries every horse past the line and stops them at different places', () => {
+    const settled = replay.at(replay.settledAt)
+    expect(replay.settledAt).toBeGreaterThan(replay.duration)
+    for (const runner of settled.runners) {
+      expect(runner.traveled).toBeGreaterThan(2400 + FIELD.runoutMin - 1)
+      expect(runner.speed).toBeCloseTo(0)
+    }
+    expect(new Set(settled.runners.map((r) => Math.round(r.traveled))).size).toBeGreaterThan(settled.runners.length / 2)
+  })
+
+  it('keeps moving forward while slowing down just after the line', () => {
+    const winner = JAPAN_CUP_2023.horses[0].number
+    const at = (t) => replay.at(t).runners.find((r) => r.number === winner)
+    const finish = replay.finishTimes[winner]
+    expect(at(finish + 1).traveled).toBeGreaterThan(2400)
+    expect(at(finish + 2).traveled).toBeGreaterThan(at(finish + 1).traveled)
+    expect(at(finish + 2).speed).toBeLessThan(at(finish + 0.5).speed)
   })
 })

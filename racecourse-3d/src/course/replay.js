@@ -1,4 +1,4 @@
-import { FIELD, stallLateral } from './field'
+import { FIELD, coastAfterFinish, createRandom, pickStopAfter, stallLateral } from './field'
 import { wakuOf } from './startingGate'
 
 // レース再現：由 JRA 公布的成績還原每頭馬在每個時間點的位置。
@@ -13,6 +13,8 @@ const SECONDS_PER_LENGTH = METERS_PER_LENGTH / 17 // 終點附近 1 馬身約 0.
 const LAST_3F = 600
 const MAX_CORNER_CORRECTION = 8 // コーナー順位對配速曲線的修正上限（m），避免速度忽快忽慢
 const PACE_SAMPLE = 10 // 道中配速曲線每隔幾秒取一個控制點
+const SPEED_SAMPLE = 0.1 // 以前後多少秒的距離差估速度
+const STOP_SEED = 20231126 // 過終點後的停止距離：每頭馬不同，但每次重播都一樣
 
 // コーナー通過順位的間隔記號（JRA 定義），換算成馬身取區間中間值
 const GAP = {
@@ -251,6 +253,7 @@ export function buildReplay(race, { length, cornerDistances }) {
   )
   const corrections = cornerCorrections(orders, cornerTimes, (number, t) => paces.get(number).pace(t))
 
+  const stopRandom = createRandom(STOP_SEED)
   const tracks = race.horses.map(({ number, name }) => {
     const finish = finishTimes[number]
     const { t600, pace } = paces.get(number)
@@ -266,25 +269,38 @@ export function buildReplay(race, { length, cornerDistances }) {
       { t: 0, value: stallLateral(number) },
       ...seen.map(({ c, entry }) => ({ t: cornerTimes[c], value: FIELD.minLateral + entry.lane * FIELD.lane })),
     ])
-    return { number, name, finish, distanceAt, lateralAt }
+    const finishSpeed = (length - distanceAt(finish - SPEED_SAMPLE)) / SPEED_SAMPLE
+    return { number, name, finish, distanceAt, lateralAt, finishSpeed, stopAfter: pickStopAfter(stopRandom) }
   })
 
   const duration = Math.max(...Object.values(finishTimes))
+  // 最後一頭過終點後減速停下的時刻（等減速度停下所需時間為 2s/v）
+  const settledAt = Math.max(
+    ...tracks.map(({ finish, finishSpeed, stopAfter }) => finish + (finishSpeed > 0 ? (2 * stopAfter) / finishSpeed : 0)),
+  )
+
+  /** 一頭馬在時間 t 的已跑距離與速度；過終點後依 coastAfterFinish 減速 */
+  const motionAt = ({ finish, distanceAt, finishSpeed, stopAfter }, t) => {
+    if (t < finish) {
+      const traveled = distanceAt(t)
+      return { traveled, speed: (distanceAt(t + SPEED_SAMPLE) - traveled) / SPEED_SAMPLE }
+    }
+    const coast = coastAfterFinish(finishSpeed, stopAfter, t - finish)
+    return { traveled: length + coast.distance, speed: coast.speed }
+  }
 
   /** 時間 t（比賽時間，秒）時的馬群狀態，格式與 field.js 相同，可直接交給 Field 畫面使用 */
   const at = (t) => {
     const runners = tracks
-      .map(({ number, name, finish, distanceAt, lateralAt }) => {
-        const traveled = distanceAt(t)
-        const isFinished = t >= finish
+      .map((track) => {
+        const { number, name, finish, lateralAt } = track
         return {
           number,
           waku: wakuOf(number, count),
           label: name,
-          traveled,
+          ...motionAt(track, t),
           lateral: lateralAt(t),
-          speed: isFinished ? 0 : (distanceAt(t + 0.1) - traveled) / 0.1,
-          finishedAt: isFinished ? finish : null,
+          finishedAt: t >= finish ? finish : null,
         }
       })
       .sort((a, b) => a.number - b.number)
@@ -295,5 +311,5 @@ export function buildReplay(race, { length, cornerDistances }) {
     return { time: t, runners, finishOrder }
   }
 
-  return { at, duration, finishTimes, cornerTimes, count }
+  return { at, duration, settledAt, finishTimes, cornerTimes, count }
 }

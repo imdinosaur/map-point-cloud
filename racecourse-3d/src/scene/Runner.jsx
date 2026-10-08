@@ -14,7 +14,7 @@ const FINISH_HOLD = 1.5 // 跑完一場後在終點停留秒數
 /**
  * 玩家的跑者（VRM 角色）。
  * - 連續繞圈：自己沿 run.path 前進並無限循環。
- * - 比賽（driven）：由 Field 的馬群模擬決定位置，這裡只讀 traveledRef、lateralRef、drivenMovingRef。
+ * - 比賽（driven）：由 Field 的馬群模擬決定位置，這裡只讀 traveledRef、lateralRef、drivenMovingRef、drivenPaceRef。
  * traveledRef、lateralRef 由外部提供，讓跟隨鏡頭與太陽讀取同一個位置。
  * hidden 時只隱藏外觀、照常前進；showMarker 控制頭上的倒三角（只在俯瞰需要）。
  * onProgress({ remaining, elevation, lapFraction }) 每幀呼叫，請只做 DOM 更新。
@@ -28,6 +28,7 @@ export default function Runner({
   lateralRef,
   driven,
   drivenMovingRef,
+  drivenPaceRef,
   hidden,
   showMarker,
   onProgress,
@@ -36,6 +37,7 @@ export default function Runner({
   const bodyRef = useRef(null)
   const holdRef = useRef(0)
   const movingRef = useRef(false)
+  const paceRef = useRef(1)
 
   useEffect(() => {
     if (driven) return
@@ -52,12 +54,13 @@ export default function Runner({
     movingRef.current = driven
       ? drivenMovingRef.current
       : playing && advance(run, traveledRef, holdRef, RACE_SPEED * speedMultiplier * dt, dt)
+    paceRef.current = driven ? drivenPaceRef.current : 1
 
     const { x, y, z, elevation } = runPositionAt(run, traveledRef.current, exaggeration, lateralRef.current)
     group.position.set(x, y, z)
     if (bodyRef.current) bodyRef.current.rotation.y = headingAt(run, traveledRef.current, exaggeration)
 
-    const remaining = run.path.length - traveledRef.current
+    const remaining = Math.max(0, run.distance - traveledRef.current) // 過終點後的減速區段顯示 0
     onProgress({
       remaining,
       elevation,
@@ -72,7 +75,7 @@ export default function Runner({
         {/* 模型檔不進版控：載入中或找不到模型時都以紅球代替 */}
         <FallbackBoundary fallback={<FallbackBall />}>
           <Suspense fallback={<FallbackBall />}>
-            <RunnerAvatar scale={AVATAR.scale} speedMultiplier={speedMultiplier} movingRef={movingRef} />
+            <RunnerAvatar scale={AVATAR.scale} speedMultiplier={speedMultiplier} movingRef={movingRef} paceRef={paceRef} />
           </Suspense>
         </FallbackBoundary>
       </group>
@@ -103,7 +106,7 @@ function headingAt(run, traveled, exaggeration) {
 
 /** 推進已跑距離；回傳這一幀是否有在跑（終點停留時為 false） */
 function advance(run, traveledRef, holdRef, step, dt) {
-  const { length } = run.path
+  const length = run.distance
   if (run.isLap) {
     traveledRef.current = (traveledRef.current + step) % length
     return true

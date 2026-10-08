@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CHUTE_STARTS } from './chute'
 import { DIRT, RACE_DISTANCES, STEEPLE, TURF, TURF_COURSES } from './courseData'
 import { createCourseModel, isValidRunId, LAYOUT, offsetForLength, parseRunId, turfWidthAt } from './courseModel'
+import { FIELD } from './field'
 
 const model = createCourseModel()
 const distanceToLoop = (p) => Math.min(...model.points.map((q) => Math.hypot(p.x - q.x, p.z - q.z)))
@@ -42,9 +43,16 @@ describe('createRun', () => {
       for (const distance of distances) {
         const run = model.createRun(`${surface}-${distance}`, 0)
         expect(Math.abs(run.distance - distance)).toBeLessThan(1)
-        expect(run.elevations.at(-1)).toBeCloseTo(0)
+        const goal = run.path.traveled.findIndex((t) => Math.abs(t - run.distance) < 1e-6)
+        expect(run.elevations[goal]).toBeCloseTo(0)
       }
     }
+  })
+
+  it('continues past the goal so runners can slow down', () => {
+    const run = model.createRun('turf-2400', 0)
+    expect(run.path.length - run.distance).toBeGreaterThan(FIELD.runoutMax)
+    expect(model.createRun('lap', 0).path.length).toBe(model.createRun('lap', 0).distance)
   })
 
   it('starts 1,600m / 1,800m / 2,000m on the chute and the rest on the oval', () => {

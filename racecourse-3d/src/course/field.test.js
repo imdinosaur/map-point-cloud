@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FIELD, createField, rankings, stallLateral, stepField } from './field'
+import { FIELD, coastAfterFinish, createField, isSettled, rankings, stallLateral, stepField } from './field'
 import { wakuOf } from './startingGate'
 
 const RACE_SPEED = 16.7
@@ -91,5 +91,45 @@ describe('rankings', () => {
     const finished = { ...runners[0], traveled: 1000, finishedAt: 60 }
     const ordered = rankings({ ...field, runners: [finished, runners[1], runners[2]], finishOrder: [1] })
     expect(ordered).toEqual([1, 2, 3])
+  })
+})
+
+describe('coastAfterFinish', () => {
+  it('stops exactly stopAfter metres past the line', () => {
+    const stopped = coastAfterFinish(17, 100, 60)
+    expect(stopped.distance).toBeCloseTo(100)
+    expect(stopped.speed).toBe(0)
+  })
+
+  it('slows down steadily on the way', () => {
+    const early = coastAfterFinish(17, 100, 1)
+    const later = coastAfterFinish(17, 100, 4)
+    expect(early.speed).toBeLessThan(17)
+    expect(later.speed).toBeLessThan(early.speed)
+    expect(later.distance).toBeGreaterThan(early.distance)
+  })
+})
+
+describe('after the finish', () => {
+  const course = straight(1600)
+  let field = createField({ seed: 3 })
+  for (let t = 0; t < 400 && !isSettled(field); t += 1 / 30) field = stepField(field, 1 / 30, course)
+
+  it('runs past the line and comes to a stop', () => {
+    expect(isSettled(field)).toBe(true)
+    for (const runner of field.runners) {
+      expect(runner.traveled - course.length).toBeGreaterThan(FIELD.runoutMin - 1)
+      expect(runner.traveled - course.length).toBeLessThanOrEqual(FIELD.runoutMax + 1e-6)
+    }
+  })
+
+  it('stops each horse at a different place', () => {
+    const stops = new Set(field.runners.map((runner) => Math.round(runner.traveled)))
+    expect(stops.size).toBeGreaterThan(field.runners.length / 2)
+  })
+
+  it('keeps the same runners as before the runout was added', () => {
+    // 停止距離用獨立的亂數，不影響跑法與能力
+    expect(createField({ seed: 3 }).runners.map((r) => r.style)).toEqual(field.runners.map((r) => r.style))
   })
 })
