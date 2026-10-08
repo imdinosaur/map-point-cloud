@@ -1,9 +1,10 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
 import { Html, Line } from '@react-three/drei'
 import { Matrix4, Quaternion, Vector3 } from 'three'
 import { LAYOUT } from '../course/courseModel'
-import { GATE, GATE_WIDTH } from '../course/startingGate'
-import { COLORS, surfaceY } from './sceneConfig'
+import { GATE, GATE_DEPARTURE, GATE_WIDTH, gateDeparture } from '../course/startingGate'
+import { COLORS, MAX_FRAME_DELTA, surfaceY } from './sceneConfig'
 import StartingGate from './StartingGate'
 
 const ROUTE_LIFT = 0.6
@@ -48,8 +49,32 @@ const pinStyle = {
 }
 const stemStyle = { width: 2, height: STEM_HEIGHT, background: COLORS.route, boxShadow: '0 0 2px rgba(0,0,0,0.4)' }
 
-/** 所選比賽的路線（起點 → 終點）與發馬機位置；連續繞圈時不顯示 */
-export default function RaceGuide({ run, exaggeration }) {
+/**
+ * 所選比賽的路線（起點 → 終點）與發馬機位置；連續繞圈時不顯示。
+ * 玩家跑離閘門 GATE_DEPARTURE.after 公尺後，發馬機往外側拖離跑道並消失；下一場（已跑距離歸零）時回到原位。
+ * 「スタート」牌子留在原地，俯瞰時仍看得出起點。
+ */
+export default function RaceGuide({ run, exaggeration, playing, traveledRef }) {
+  const gateRef = useRef(null)
+  const departureRef = useRef(0) // 撤走進度 0〜1
+
+  useEffect(() => {
+    departureRef.current = 0
+  }, [run])
+
+  useFrame((_, delta) => {
+    const gate = gateRef.current
+    if (!gate) return
+    if (traveledRef.current < GATE_DEPARTURE.after) departureRef.current = 0
+    else if (playing) {
+      const dt = Math.min(delta, MAX_FRAME_DELTA) // 切回分頁時 delta 很大，不要一下就拖完
+      departureRef.current = Math.min(departureRef.current + dt / GATE_DEPARTURE.duration, 1)
+    }
+    const { offset, visible } = gateDeparture(departureRef.current)
+    gate.position.x = offset // 局部 x 指向外側
+    gate.visible = visible
+  })
+
   const guide = useMemo(() => {
     if (run.isLap) return null
     const { points, traveled } = run.path
@@ -66,7 +91,9 @@ export default function RaceGuide({ run, exaggeration }) {
     <group>
       <Line points={guide.route} color={COLORS.route} lineWidth={3} transparent opacity={0.85} />
       <group position={guide.gate.position} quaternion={guide.gate.quaternion}>
-        <StartingGate forward={guide.gate.forward} />
+        <group ref={gateRef}>
+          <StartingGate forward={guide.gate.forward} />
+        </group>
         <Html position={[GATE_WIDTH / 2, GATE.height, (-guide.gate.forward * GATE.depth) / 2]} center zIndexRange={[10, 0]}>
           <div style={pinStyle}>
             <span style={labelStyle}>

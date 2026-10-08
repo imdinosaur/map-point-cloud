@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GATE, GATE_WIDTH, gateLayout, wakuOf } from './startingGate'
+import { GATE, GATE_DEPARTURE, GATE_WIDTH, gateDeparture, gateLayout, wakuOf } from './startingGate'
 
 describe('wakuOf', () => {
   it('gives each horse its own waku up to 8 runners', () => {
@@ -33,5 +33,21 @@ describe('gateLayout', () => {
     const { partitions, stalls } = gateLayout()
     stalls.forEach((stall, k) => expect(stall.x).toBeCloseTo((partitions[k] + partitions[k + 1]) / 2))
     expect(stalls[0]).toMatchObject({ number: 1, waku: 1 })
+  })
+})
+
+describe('gateDeparture', () => {
+  it('stays at the start before departing', () => {
+    expect(gateDeparture(0)).toEqual({ offset: 0, visible: true })
+    expect(gateDeparture(-1)).toEqual({ offset: 0, visible: true })
+  })
+
+  it('moves outward steadily and disappears once clear of the track', () => {
+    const offsets = [0.25, 0.5, 0.75].map((p) => gateDeparture(p).offset)
+    expect(offsets[0]).toBeLessThan(offsets[1])
+    expect(offsets[1]).toBeCloseTo(GATE_DEPARTURE.distance / 2)
+    expect(offsets[2]).toBeLessThan(GATE_DEPARTURE.distance)
+    expect(gateDeparture(1)).toEqual({ offset: GATE_DEPARTURE.distance, visible: false })
+    expect(gateDeparture(2).visible).toBe(false)
   })
 })

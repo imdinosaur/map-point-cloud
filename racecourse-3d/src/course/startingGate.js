@@ -14,6 +14,18 @@ export const GATE = {
 
 export const GATE_WIDTH = GATE.stalls * GATE.pitch + GATE.endFrame * 2
 
+/** 出閘後撤走發馬機：跑者離開閘門多遠後開始拖走、往外側拖多遠（越過最寬的芝）、花幾秒 */
+export const GATE_DEPARTURE = { after: 100, distance: 45, duration: 3 }
+
+/**
+ * 撤走進度 progress（0〜1）時發馬機往外側的位移；頭尾放慢，像牽引車起步與停下。到 1 時隱藏。
+ * @returns {{ offset: number, visible: boolean }}
+ */
+export function gateDeparture(progress) {
+  const p = Math.min(Math.max(progress, 0), 1)
+  return { offset: GATE_DEPARTURE.distance * p * p * (3 - 2 * p), visible: p < 1 }
+}
+
 /** 枠番顏色（1 白 2 黒 3 赤 4 青 5 黄 6 緑 7 橙 8 桃） */
 export const WAKU_COLORS = ['#f5f5f5', '#222222', '#d8322f', '#2a5fbf', '#f2c230', '#2f8f3a', '#ef8a1e', '#f29bb7']
 

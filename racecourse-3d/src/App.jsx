@@ -131,7 +131,7 @@ export default function App() {
         <Venue model={MODEL} exaggeration={exaggeration} base={base} materials={surfaceMaterials} />
         <Tracks model={MODEL} railShift={railShift} exaggeration={exaggeration} base={base} materials={surfaceMaterials} detailedRails={viewMode !== 'overview'} />
         <Landmarks model={MODEL} railShift={railShift} exaggeration={exaggeration} />
-        <RaceGuide run={run} exaggeration={exaggeration} />
+        <RaceGuide run={run} exaggeration={exaggeration} playing={playing} traveledRef={traveledRef} />
         {/* 比賽時由馬群模擬決定玩家位置，必須排在 Runner 之前 */}
         {!run.isLap && (
           <Field
