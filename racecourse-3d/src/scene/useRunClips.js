@@ -3,7 +3,8 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
 import { retargetMixamoClip } from './mixamoRetarget'
 
 const ANIMATION_DIR = `${import.meta.env.BASE_URL}animations/`
-const CLIP_URLS = { slow: `${ANIMATION_DIR}slow-run.fbx`, fast: `${ANIMATION_DIR}fast-run.fbx` }
+// slow：低速時的跑法，fast：速度 ×3 以上（見 runAnimator 的 FAST_RUN_FROM）
+const CLIP_URLS = { slow: `${ANIMATION_DIR}fast-run.fbx`, fast: `${ANIMATION_DIR}sprint.fbx` }
 
 /** 同一個 vrm 只載入、retarget 一次（useLoader 會快取 vrm，重新掛載時拿到同一個） */
 const cache = new WeakMap()
