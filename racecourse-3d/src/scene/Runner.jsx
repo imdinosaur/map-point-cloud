@@ -6,36 +6,54 @@ import RunnerAvatar from './RunnerAvatar'
 import { AVATAR, COLORS, MAX_FRAME_DELTA, RACE_SPEED } from './sceneConfig'
 import { runPositionAt } from './runPosition'
 
-const BODY_RADIUS = 2.5 // 模型載入前或缺少模型時的替代球
+const BODY_RADIUS = AVATAR.height * 0.3 // 模型載入前或缺少模型時的替代球，大小與角色相當
 const MARKER_HEIGHT = AVATAR.height + 6 // 頭上的倒三角標記，俯瞰時用來找到跑者
 const HEADING_SPAN = 4 // 取前方幾公尺決定面向
 const FINISH_HOLD = 1.5 // 跑完一場後在終點停留秒數
 
 /**
- * 沿 run.path 移動的標記。連續繞圈時無限循環；比賽跑法到終點停留後重新起跑。
- * traveledRef 由外部提供，讓跟隨鏡頭讀取同一個位置。
+ * 玩家的跑者（VRM 角色）。
+ * - 連續繞圈：自己沿 run.path 前進並無限循環。
+ * - 比賽（driven）：由 Field 的馬群模擬決定位置，這裡只讀 traveledRef、lateralRef、drivenMovingRef。
+ * traveledRef、lateralRef 由外部提供，讓跟隨鏡頭與太陽讀取同一個位置。
  * hidden 時只隱藏外觀、照常前進；showMarker 控制頭上的倒三角（只在俯瞰需要）。
  * onProgress({ remaining, elevation, lapFraction }) 每幀呼叫，請只做 DOM 更新。
  */
-export default function Runner({ run, exaggeration, playing, speedMultiplier, traveledRef, hidden, showMarker, onProgress }) {
+export default function Runner({
+  run,
+  exaggeration,
+  playing,
+  speedMultiplier,
+  traveledRef,
+  lateralRef,
+  driven,
+  drivenMovingRef,
+  hidden,
+  showMarker,
+  onProgress,
+}) {
   const groupRef = useRef(null)
   const bodyRef = useRef(null)
   const holdRef = useRef(0)
   const movingRef = useRef(false)
 
   useEffect(() => {
+    if (driven) return
     traveledRef.current = 0
+    lateralRef.current = 0
     holdRef.current = 0
-  }, [run, traveledRef])
+  }, [run, driven, traveledRef, lateralRef])
 
   useFrame((_, delta) => {
     const group = groupRef.current
     if (!group) return
     const dt = Math.min(delta, MAX_FRAME_DELTA)
 
-    movingRef.current = playing && advance(run, traveledRef, holdRef, RACE_SPEED * speedMultiplier * dt, dt)
+    movingRef.current = driven
+      ? drivenMovingRef.current
+      : playing && advance(run, traveledRef, holdRef, RACE_SPEED * speedMultiplier * dt, dt)
 
-    const { x, y, z, elevation } = runPositionAt(run, traveledRef.current, exaggeration)
+    const { x, y, z, elevation } = runPositionAt(run, traveledRef.current, exaggeration, lateralRef.current)
     group.position.set(x, y, z)
     if (bodyRef.current) bodyRef.current.rotation.y = headingAt(run, traveledRef.current, exaggeration)
 

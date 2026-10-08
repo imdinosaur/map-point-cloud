@@ -1,4 +1,4 @@
-import { cumulativeLengths } from './geometry'
+import { computeNormals, cumulativeLengths } from './geometry'
 
 /**
  * 賽道量測線（封閉、第 0 點為終點）。
@@ -115,4 +115,41 @@ export function lookAheadSpan(length, traveled, isLap, ahead) {
   if (isLap) return { from: traveled, to: (traveled + ahead) % length }
   const to = Math.min(traveled + ahead, length)
   return { from: Math.max(0, to - ahead), to }
+}
+
+const MAX_CURVATURE = 0.05 // 引込線匯入本線等折點的上限（1/m），避免單一段落的尖峰
+
+/**
+ * 跑法的橫向座標系：每個點往外側的單位法向量，以及沿路線的曲率。
+ * 曲率定義為「往外 1m 的平行線比路線長多少」：彎道為正，外側跑得比較遠。
+ * @param {RacePath} path
+ * @param {{x:number, z:number}} startOutward 起點處指向外側的方向（決定法向量正負）
+ */
+export function laneFrame(path, startOutward) {
+  const { points, traveled } = path
+  const normals = computeNormals(points, false, 1)
+  const flip = normals[0].x * startOutward.x + normals[0].z * startOutward.z < 0 ? -1 : 1
+  const outward = normals.map(({ x, z }) => ({ x: x * flip, z: z * flip }))
+
+  const curvature = points.slice(0, -1).map((a, k) => {
+    const b = points[k + 1]
+    const length = Math.hypot(b.x - a.x, b.z - a.z)
+    if (length === 0) return 0
+    const dx = b.x + outward[k + 1].x - (a.x + outward[k].x)
+    const dz = b.z + outward[k + 1].z - (a.z + outward[k].z)
+    return Math.min(Math.max(Math.hypot(dx, dz) / length - 1, -MAX_CURVATURE), MAX_CURVATURE)
+  })
+
+  /** 已跑距離處的曲率 */
+  const curvatureAt = (distance) => {
+    let lo = 0
+    let hi = curvature.length - 1
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1
+      if (traveled[mid] <= distance) lo = mid
+      else hi = mid - 1
+    }
+    return curvature[lo] ?? 0
+  }
+  return { outward, curvatureAt }
 }

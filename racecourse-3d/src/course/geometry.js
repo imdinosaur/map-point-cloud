@@ -125,52 +125,70 @@ export function buildCenterline(trace, targetLength, sampleCount) {
 /**
  * 沿中心線擠出帶狀實體（頂面＋兩側牆，開放時加端蓋），牆面向下延伸到 base。
  * inner / outer / top 皆為 (index) => number；inner、outer 為沿法向量的偏移量。
+ * UV 以公尺為單位：頂面 u = 沿中心線距離、v = 橫向偏移；牆面 u = 沿線距離、v = 高度。
+ * 材質群組：0 = 頂面（草、砂），1 = 牆面與端蓋（土）。
  */
 export function buildBandGeometry({ points, normals, closed, inner, outer, top, base }) {
   const n = points.length
-  const segments = closed ? n : n - 1
+  // 封閉環在接縫處多放一組頂點（u = 全長），否則最後一段的 u 會從全長倒退回 0，貼圖被擠成一條
+  const count = closed ? n + 1 : n
+  const along = cumulativeLengths(points, closed)
   const positions = []
+  const uvs = []
   const indices = []
 
-  const at = (i, d, y) => {
-    const p = offsetPoint(points[i], normals[i], d)
-    return [p.x, y, p.z]
-  }
-  const pushVertex = (v) => {
-    positions.push(...v)
+  const pushVertex = ([x, y, z], [u, v]) => {
+    positions.push(x, y, z)
+    uvs.push(u, v)
     return positions.length / 3 - 1
   }
+  const at = (i, d, y) => {
+    const p = offsetPoint(points[i % n], normals[i % n], d)
+    return [p.x, y, p.z]
+  }
+  /** 兩條邊之間的帶狀面；edge(i) 回傳 [位置, uv] */
   const strip = (edgeA, edgeB) => {
     const start = positions.length / 3
-    for (let i = 0; i < n; i++) {
-      pushVertex(edgeA(i))
-      pushVertex(edgeB(i))
+    for (let i = 0; i < count; i++) {
+      pushVertex(...edgeA(i))
+      pushVertex(...edgeB(i))
     }
-    for (let s = 0; s < segments; s++) {
+    for (let s = 0; s < count - 1; s++) {
       const a = start + 2 * s
-      const b = start + 2 * ((s + 1) % n)
+      const b = a + 2
       indices.push(a, a + 1, b, a + 1, b + 1, b)
     }
   }
-  const innerTop = (i) => at(i, inner(i), top(i))
-  const outerTop = (i) => at(i, outer(i), top(i))
-  const innerBase = (i) => at(i, inner(i), base)
-  const outerBase = (i) => at(i, outer(i), base)
+  const edge = (offset, height, side) => (i) => {
+    const d = offset(i % n)
+    const y = height === 'top' ? top(i % n) : base
+    return [at(i, d, y), side === 'top' ? [along[i], d] : [along[i], y]]
+  }
 
-  strip(innerTop, outerTop)
-  strip(innerBase, innerTop)
-  strip(outerTop, outerBase)
+  strip(edge(inner, 'top', 'top'), edge(outer, 'top', 'top'))
+  const topCount = indices.length
+  strip(edge(inner, 'base', 'wall'), edge(inner, 'top', 'wall'))
+  strip(edge(outer, 'top', 'wall'), edge(outer, 'base', 'wall'))
 
   if (!closed) {
     for (const i of [0, n - 1]) {
-      const [a, b, c, d] = [innerTop(i), outerTop(i), outerBase(i), innerBase(i)].map(pushVertex)
+      const corners = [
+        [at(i, inner(i), top(i)), [inner(i), top(i)]],
+        [at(i, outer(i), top(i)), [outer(i), top(i)]],
+        [at(i, outer(i), base), [outer(i), base]],
+        [at(i, inner(i), base), [inner(i), base]],
+      ]
+      const [a, b, c, d] = corners.map(([position, uv]) => pushVertex(position, uv))
       indices.push(a, b, c, a, c, d)
     }
   }
 
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
   geometry.setIndex(indices)
+  geometry.addGroup(0, topCount, 0)
+  geometry.addGroup(topCount, indices.length - topCount, 1)
   geometry.computeVertexNormals()
   return geometry
 }
@@ -234,14 +252,18 @@ function interiorGrid([contour, ...holes], step) {
 
 /**
  * 平面多邊形（可含洞）擠出成實體：頂面依 topAt(x, z) 決定高度，外框與洞的邊牆向下延伸到 base。
+ * 材質群組：0 = 頂面、1 = 牆面；UV 以公尺為單位。
  * gridStep > 0 時於內部加入格點（earcut 以單點洞作為內部頂點），避免大三角形把高度拉成平面而與其他物件交錯。
  * @param {Array<Array<Array<{x:number,z:number}>>>} polygons 每個多邊形為 [外框, ...洞]，環線不重複首點
  */
 export function buildSlabGeometry(polygons, topAt, base, gridStep = 0) {
   const positions = []
-  const indices = []
-  const pushVertex = (x, y, z) => {
+  const uvs = []
+  const topIndices = []
+  const wallIndices = []
+  const pushVertex = (x, y, z, u, v) => {
     positions.push(x, y, z)
+    uvs.push(u, v)
     return positions.length / 3 - 1
   }
 
@@ -249,27 +271,34 @@ export function buildSlabGeometry(polygons, topAt, base, gridStep = 0) {
     const [contour, ...holes] = polygon
     const steiner = gridStep > 0 ? interiorGrid(polygon, gridStep).map((p) => [p]) : []
     const start = positions.length / 3
-    ;[contour, ...holes, ...steiner].flat().forEach((p) => pushVertex(p.x, topAt(p.x, p.z), p.z))
+    // 頂面由上往下投影：uv = (x, z)，公尺為單位
+    ;[contour, ...holes, ...steiner].flat().forEach((p) => pushVertex(p.x, topAt(p.x, p.z), p.z, p.x, p.z))
     const toVec2 = (ring) => ring.map((p) => new THREE.Vector2(p.x, p.z))
     THREE.ShapeUtils.triangulateShape(toVec2(contour), [...holes, ...steiner].map(toVec2)).forEach(([a, b, c]) =>
-      indices.push(start + a, start + b, start + c),
+      topIndices.push(start + a, start + b, start + c),
     )
 
+    // 牆面：u = 沿邊線累計距離、v = 高度
     for (const ring of [contour, ...holes]) {
+      const along = cumulativeLengths(ring, true)
       ring.forEach((p, k) => {
         const q = ring[(k + 1) % ring.length]
-        const a = pushVertex(p.x, topAt(p.x, p.z), p.z)
-        const b = pushVertex(q.x, topAt(q.x, q.z), q.z)
-        const c = pushVertex(q.x, base, q.z)
-        const d = pushVertex(p.x, base, p.z)
-        indices.push(a, d, b, b, d, c)
+        const [u0, u1] = [along[k], along[k + 1]]
+        const a = pushVertex(p.x, topAt(p.x, p.z), p.z, u0, topAt(p.x, p.z))
+        const b = pushVertex(q.x, topAt(q.x, q.z), q.z, u1, topAt(q.x, q.z))
+        const c = pushVertex(q.x, base, q.z, u1, base)
+        const d = pushVertex(p.x, base, p.z, u0, base)
+        wallIndices.push(a, d, b, b, d, c)
       })
     }
   }
 
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
-  geometry.setIndex(indices)
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
+  geometry.setIndex([...topIndices, ...wallIndices])
+  geometry.addGroup(0, topIndices.length, 0)
+  geometry.addGroup(topIndices.length, wallIndices.length, 1)
   geometry.computeVertexNormals()
   return geometry
 }
@@ -302,4 +331,67 @@ export function rayDistanceToRing(origin, dir, ring) {
     if (t > 0 && s >= 0 && s <= 1) nearest = Math.min(nearest, t)
   })
   return nearest
+}
+
+/**
+ * 沿 3D 折線（{x, y, z}，y 為欄杆頂高度）每 spacing 公尺放一根欄柱，回傳欄柱頂端位置。
+ * 距離以水平長度計；開放折線兩端都放，封閉環線不在接縫重複放。
+ */
+export function railPostPositions(path, closed, spacing) {
+  const n = path.length
+  const segments = closed ? n : n - 1
+  const posts = []
+  let segmentStart = 0
+  let next = 0
+  for (let s = 0; s < segments; s++) {
+    const a = path[s]
+    const b = path[(s + 1) % n]
+    const length = Math.hypot(b.x - a.x, b.z - a.z)
+    const isLast = s === segments - 1
+    while (next < segmentStart + length - 1e-9 || (!closed && isLast && next <= segmentStart + length + 1e-9)) {
+      const t = length > 0 ? (next - segmentStart) / length : 0
+      posts.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t })
+      next += spacing
+    }
+    segmentStart += length
+  }
+  return posts
+}
+
+/**
+ * 沿 3D 折線擠出方形斷面的欄杆橫桿（半寬 halfWidth），頂點在轉角共用，計算法向量後呈圓潤外觀。
+ * 斷面方向：水平取折線的側向、垂直取正上方，所以欄杆不會隨坡度傾斜。
+ */
+export function buildRailGeometry(path, closed, halfWidth) {
+  const n = path.length
+  const sides = computeNormals(path, closed, 1)
+  // 斷面四角：(側向, 上下) 的正負組合，依序繞一圈
+  const corners = [
+    [1, 1],
+    [-1, 1],
+    [-1, -1],
+    [1, -1],
+  ]
+  const positions = path.flatMap((p, i) =>
+    corners.flatMap(([side, up]) => [
+      p.x + sides[i].x * side * halfWidth,
+      p.y + up * halfWidth,
+      p.z + sides[i].z * side * halfWidth,
+    ]),
+  )
+  const indices = []
+  const segments = closed ? n : n - 1
+  for (let s = 0; s < segments; s++) {
+    const i = s * 4
+    const j = ((s + 1) % n) * 4
+    for (let f = 0; f < 4; f++) {
+      const g = (f + 1) % 4
+      indices.push(i + f, i + g, j + g, i + f, j + g, j + f)
+    }
+  }
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geometry.setIndex(indices)
+  geometry.computeVertexNormals()
+  return geometry
 }

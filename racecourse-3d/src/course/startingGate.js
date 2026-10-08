@@ -17,6 +17,9 @@ export const GATE_WIDTH = GATE.stalls * GATE.pitch + GATE.endFrame * 2
 /** 枠番顏色（1 白 2 黒 3 赤 4 青 5 黄 6 緑 7 橙 8 桃） */
 export const WAKU_COLORS = ['#f5f5f5', '#222222', '#d8322f', '#2a5fbf', '#f2c230', '#2f8f3a', '#ef8a1e', '#f29bb7']
 
+/** 枠色上的數字顏色（依 JRA 出馬表：白、黃、橙、桃底用黑字，其餘白字） */
+export const WAKU_TEXT_COLORS = ['#1d2a1f', '#ffffff', '#ffffff', '#ffffff', '#1d2a1f', '#ffffff', '#1d2a1f', '#1d2a1f']
+
 /**
  * 馬番 → 枠番（1〜8）。依 JRA 規則：頭數超過 8 時平均分配，餘數由外側（大枠）各多 1 頭。
  * @param {number} horse 1 起算的馬番

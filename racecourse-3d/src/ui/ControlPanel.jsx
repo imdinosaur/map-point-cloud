@@ -1,7 +1,9 @@
 import { DIRT, STEEPLE, TURF, TURF_COURSES } from '../course/courseData'
 import { COLORS } from '../scene/sceneConfig'
 import ExaggerationSlider from './ExaggerationSlider'
+import { raceById } from '../course/races'
 import ProfileChart from './ProfileChart'
+import RaceField from './RaceField'
 import RaceSelector from './RaceSelector'
 import './ControlPanel.css'
 
@@ -22,7 +24,9 @@ const LEGEND = [
 /**
  * @param {{
  *   course: keyof typeof TURF_COURSES, onCourseChange: (c: string) => void,
+ *   isRace: boolean, playerNumber: number, onPlayerNumberChange: (n: number) => void, rankingStore,
  *   runId: string, onRunChange: (id: string) => void, surface: 'turf' | 'dirt',
+ *   replayId: string | null, onReplayChange: (id: string) => void,
  *   modelLengths: Record<string, number>,
  *   exaggeration: number, onExaggerationChange: (v: number) => void,
  *   playing: boolean, onTogglePlaying: () => void,
@@ -33,9 +37,15 @@ const LEGEND = [
  */
 export default function ControlPanel({
   course,
+  isRace,
+  playerNumber,
+  onPlayerNumberChange,
+  rankingStore,
   onCourseChange,
   runId,
   onRunChange,
+  replayId,
+  onReplayChange,
   surface,
   modelLengths,
   exaggeration,
@@ -76,7 +86,15 @@ export default function ControlPanel({
         </div>
       </section>
       <ProfileChart markerRef={markerRef} />
-      <RaceSelector runId={runId} onRunChange={onRunChange} />
+      <RaceSelector runId={runId} onRunChange={onRunChange} replayId={replayId} onReplayChange={onReplayChange} />
+      {isRace && (
+        <RaceField
+          title={raceById(replayId)?.name}
+          playerNumber={playerNumber}
+          onPlayerNumberChange={onPlayerNumberChange}
+          rankingStore={rankingStore}
+        />
+      )}
 
       <section className="panel__group">
         <span className="panel__label">芝コース（仮柵位置）</span>

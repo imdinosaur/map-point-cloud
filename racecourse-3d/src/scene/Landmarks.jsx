@@ -6,8 +6,10 @@ import { offsetPoint } from '../course/geometry'
 import { COLORS, turfSurfaceY } from './sceneConfig'
 
 const FURLONG_STEP = 200
-const FURLONG_POST_HEIGHT = 3
-const GOAL_POST_HEIGHT = 9
+// 實際尺寸（公尺）：與 1.6m 的角色、1m 的護欄同比例
+const FURLONG = { height: 2.5, radius: 0.08 } // ハロン棒：內欄內側的細桿
+const GOAL = { height: 4, radius: 0.12, boardRadius: 0.6, boardThickness: 0.08 } // 決勝標：細桿頂端一塊圓板
+const LABEL_LIFT = 1.5 // 名牌（HTML）在桿頂上方的距離
 
 const labelStyle = {
   font: '600 11px/1 system-ui, sans-serif',
@@ -36,11 +38,11 @@ function FurlongMarkers({ model, railD, exaggeration }) {
 
   return markers.map(({ r, x, y, z }) => (
     <group key={r} position={[x, y, z]}>
-      <mesh position={[0, FURLONG_POST_HEIGHT / 2, 0]}>
-        <cylinderGeometry args={[0.6, 0.6, FURLONG_POST_HEIGHT, 8]} />
+      <mesh position={[0, FURLONG.height / 2, 0]} castShadow>
+        <cylinderGeometry args={[FURLONG.radius, FURLONG.radius, FURLONG.height, 8]} />
         <meshStandardMaterial color={COLORS.furlong} />
       </mesh>
-      <Html position={[0, FURLONG_POST_HEIGHT + 4, 0]} center zIndexRange={[10, 0]}>
+      <Html position={[0, FURLONG.height + LABEL_LIFT, 0]} center zIndexRange={[10, 0]}>
         <span style={labelStyle}>{r}</span>
       </Html>
     </group>
@@ -65,15 +67,15 @@ function Goal({ model, railD, exaggeration }) {
     <group>
       <Line points={line} color="#ffffff" lineWidth={3} />
       <group position={post}>
-        <mesh position={[0, GOAL_POST_HEIGHT / 2, 0]}>
-          <cylinderGeometry args={[0.8, 0.8, GOAL_POST_HEIGHT, 12]} />
+        <mesh position={[0, GOAL.height / 2, 0]} castShadow>
+          <cylinderGeometry args={[GOAL.radius, GOAL.radius, GOAL.height, 12]} />
           <meshStandardMaterial color="#ffffff" />
         </mesh>
-        <mesh position={[0, GOAL_POST_HEIGHT, 0]}>
-          <cylinderGeometry args={[3, 3, 0.6, 24]} />
+        <mesh position={[0, GOAL.height, 0]} castShadow>
+          <cylinderGeometry args={[GOAL.boardRadius, GOAL.boardRadius, GOAL.boardThickness, 24]} />
           <meshStandardMaterial color={COLORS.goal} />
         </mesh>
-        <Html position={[0, GOAL_POST_HEIGHT + 6, 0]} center zIndexRange={[10, 0]}>
+        <Html position={[0, GOAL.height + LABEL_LIFT, 0]} center zIndexRange={[10, 0]}>
           <span style={{ ...labelStyle, background: COLORS.goal, color: '#fff', opacity: 0.85 }}>ゴール</span>
         </Html>
       </group>

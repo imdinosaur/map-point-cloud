@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildBandGeometry,
+  buildRailGeometry,
+  railPostPositions,
   buildCenterline,
   buildSlabGeometry,
   rayDistanceToRing,
@@ -163,5 +165,111 @@ describe('buildSlabGeometry with an interior grid', () => {
       const y = pos.getY(k)
       if (y !== -50) expect(y).toBeCloseTo(bowl(pos.getX(k), pos.getZ(k)), 4)
     }
+  })
+})
+
+/** 取出某個 material group 用到的頂點 uv（去重） */
+function groupUvs(geometry, materialIndex) {
+  const group = geometry.groups.find((g) => g.materialIndex === materialIndex)
+  const index = geometry.getIndex()
+  const uv = geometry.getAttribute('uv')
+  const seen = new Map()
+  for (let k = group.start; k < group.start + group.count; k++) {
+    const v = index.getX(k)
+    seen.set(v, [uv.getX(v), uv.getY(v)])
+  }
+  return [...seen.values()]
+}
+
+describe('buildBandGeometry UVs', () => {
+  const points = [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 20, z: 0 }]
+  const normals = computeNormals(points, false)
+  const band = (closed) =>
+    buildBandGeometry({ points, normals, closed, inner: () => 1, outer: () => -1, top: () => 2, base: 0 })
+
+  it('splits the top surface (material 0) from the walls (material 1)', () => {
+    const geometry = band(false)
+    expect(geometry.groups.map((g) => g.materialIndex)).toEqual([0, 1])
+    expect(geometry.groups[0].count).toBe(2 * 6) // 頂面 2 段
+  })
+
+  it('maps the top in meters: u along the track, v across it', () => {
+    const uvs = groupUvs(band(false), 0)
+    expect(uvs).toContainEqual([0, 1])
+    expect(uvs).toContainEqual([10, -1])
+    expect(uvs).toContainEqual([20, 1])
+  })
+
+  it('maps the walls by distance and height so soil is not stretched', () => {
+    const vs = groupUvs(band(false), 1).map(([, v]) => v)
+    expect(Math.max(...vs)).toBe(2)
+    expect(Math.min(...vs)).toBe(0)
+  })
+
+  it('duplicates the seam of a closed loop so u runs to the full length instead of wrapping back to 0', () => {
+    const us = groupUvs(band(true), 0).map(([u]) => u)
+    expect(Math.max(...us)).toBeCloseTo(40)
+  })
+})
+
+describe('buildSlabGeometry UVs', () => {
+  const square = [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 10 }, { x: 0, z: 10 }]
+  const geometry = buildSlabGeometry([[square]], () => 1, -2)
+
+  it('splits the top (material 0) from the walls (material 1)', () => {
+    expect(geometry.groups.map((g) => g.materialIndex)).toEqual([0, 1])
+  })
+
+  it('projects the top from above in meters', () => {
+    expect(groupUvs(geometry, 0)).toContainEqual([10, 10])
+  })
+
+  it('maps the walls by perimeter distance and height', () => {
+    const uvs = groupUvs(geometry, 1)
+    expect(Math.max(...uvs.map(([u]) => u))).toBeCloseTo(40)
+    expect(Math.min(...uvs.map(([, v]) => v))).toBe(-2)
+  })
+})
+
+describe('railPostPositions', () => {
+  const straight = [{ x: 0, y: 1, z: 0 }, { x: 10, y: 3, z: 0 }]
+
+  it('places a post every spacing metres including both ends of an open rail', () => {
+    const posts = railPostPositions(straight, false, 2.5)
+    expect(posts.map((p) => p.x)).toEqual([0, 2.5, 5, 7.5, 10])
+  })
+
+  it('follows the slope of the rail', () => {
+    const posts = railPostPositions(straight, false, 2.5)
+    expect(posts[2].y).toBeCloseTo(2)
+  })
+
+  it('does not double the post at the seam of a closed rail', () => {
+    const square = [{ x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, { x: 10, y: 0, z: 10 }, { x: 0, y: 0, z: 10 }]
+    expect(railPostPositions(square, true, 2.5)).toHaveLength(16)
+  })
+})
+
+describe('buildRailGeometry', () => {
+  const square = [{ x: 0, y: 1, z: 0 }, { x: 10, y: 1, z: 0 }, { x: 10, y: 1, z: 10 }, { x: 0, y: 1, z: 10 }]
+
+  it('wraps a square tube of the given half width around the path', () => {
+    const geometry = buildRailGeometry(square, true, 0.05)
+    geometry.computeBoundingBox()
+    const { min, max } = geometry.boundingBox
+    expect(min.y).toBeCloseTo(0.95)
+    expect(max.y).toBeCloseTo(1.05)
+    expect(max.x).toBeGreaterThan(10)
+    expect(min.x).toBeLessThan(0)
+  })
+
+  it('closes the loop with four faces per segment', () => {
+    const geometry = buildRailGeometry(square, true, 0.05)
+    expect(geometry.getIndex().count).toBe(square.length * 4 * 6)
+  })
+
+  it('leaves an open rail open at the ends', () => {
+    const geometry = buildRailGeometry(square, false, 0.05)
+    expect(geometry.getIndex().count).toBe((square.length - 1) * 4 * 6)
   })
 })

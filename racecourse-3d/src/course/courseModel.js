@@ -11,7 +11,7 @@ import {
   resampleRing,
 } from './geometry'
 import { elevationAt, fractionFromRemaining, remainingFromFraction } from './profile'
-import { buildLapPath, buildRacePath, createLoop } from './racePath'
+import { buildLapPath, buildRacePath, createLoop, laneFrame } from './racePath'
 import { CHUTE_LAYOUT, TURF_INNER_TRACE, VENUE_GAPS, VENUE_OUTLINE } from './tracing'
 import { buildVenuePolygons } from './venue'
 
@@ -135,6 +135,8 @@ export function createCourseModel() {
   const remainingAt = (i) => baseLoop.length - baseLoop.cumulative[i]
   const chute = buildChute({ points, junctionIndex, remainingAt, toWorld }, CHUTE_LAYOUT)
   const branchNormals = chute.branches.map(({ points: branch }) => computeNormals(branch, false, chuteNormalSign))
+  /** 1,800m、2,000m 的出發引込線（點列由匯入點往外，法向量指向內場側），用來畫芝面 */
+  const chuteBranches = chute.branches.map(({ points: branch }, k) => ({ points: branch, normals: branchNormals[k] }))
 
   // 邊緣重新取樣，讓草地頂面沿邊也能逐點貼合高度
   const venue = buildVenuePolygons({
@@ -166,6 +168,9 @@ export function createCourseModel() {
           }
         : null
     const path = distance === null ? buildLapPath(loop) : buildRacePath(loop, distance, chuteLine)
+    const startOutward = outwardAtStart(path, inwardSign)
+    // 多頭數比賽時各馬沿路線往外偏移；outward 為每點外側法向量、curvatureAt 為沿線曲率
+    const { outward, curvatureAt } = laneFrame(path, startOutward)
     return {
       surface,
       isLap: distance === null,
@@ -176,7 +181,9 @@ export function createCourseModel() {
         k < path.chuteCount ? venueElevationAt(p.x, p.z) : surfaceElevation(surface, path.length - path.traveled[k], loop.length),
       ),
       loopLength: loop.length,
-      startOutward: outwardAtStart(path, inwardSign),
+      startOutward,
+      outward,
+      curvatureAt,
     }
   }
 
@@ -194,6 +201,7 @@ export function createCourseModel() {
     junctionRemaining,
     venue,
     venueEdges,
+    chuteBranches,
     venueElevationAt,
     createRun,
     measureLength,
