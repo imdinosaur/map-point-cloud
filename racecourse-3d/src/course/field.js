@@ -66,22 +66,26 @@ export const stallLateral = (number) => GATE.endFrame + (number - 0.5) * GATE.pi
 /**
  * @param {{ seed: number, count?: number }} options
  * @returns {{ seed: number, time: number, runners: Runner[], finishOrder: number[] }}
- * @typedef {{ number: number, waku: number, style: string, ability: number, preferredLateral: number,
+ * @typedef {{ number: number, waku: number, style: string, label: string, ability: number, preferredLateral: number,
  *   traveled: number, lateral: number, speed: number, finishedAt: number | null }} Runner
  */
 export function createField({ seed, count = FIELD.runners }) {
   const random = createRandom(seed)
-  const runners = Array.from({ length: count }, (_, k) => ({
-    number: k + 1,
-    waku: wakuOf(k + 1, count),
-    style: pickStyle(random),
-    ability: 0.99 + random() * 0.02, // ±1%：兩分鐘的比賽累積下來，首尾約差 2〜3 秒
-    preferredLateral: FIELD.minLateral + random() * 0.8,
-    traveled: 0,
-    lateral: stallLateral(k + 1),
-    speed: 0,
-    finishedAt: null,
-  }))
+  const runners = Array.from({ length: count }, (_, k) => {
+    const style = pickStyle(random)
+    return {
+      number: k + 1,
+      waku: wakuOf(k + 1, count),
+      style,
+      label: STYLES[style].label,
+      ability: 0.99 + random() * 0.02, // ±1%：兩分鐘的比賽累積下來，首尾約差 2〜3 秒
+      preferredLateral: FIELD.minLateral + random() * 0.8,
+      traveled: 0,
+      lateral: stallLateral(k + 1),
+      speed: 0,
+      finishedAt: null,
+    }
+  })
   return { seed, time: 0, runners, finishOrder: [] }
 }
 

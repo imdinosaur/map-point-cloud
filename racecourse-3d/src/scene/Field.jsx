@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Color, MeshStandardMaterial, Object3D, SphereGeometry } from 'three'
-import { FIELD, createField, rankings, stepField } from '../course/field'
+import { createField, rankings, stepField } from '../course/field'
 import { WAKU_COLORS } from '../course/startingGate'
 import { MAX_FRAME_DELTA } from './sceneConfig'
 import { runPositionAt } from './runPosition'
@@ -17,7 +17,19 @@ const placer = new Object3D()
 const color = new Color()
 
 /**
- * 多頭數比賽：每幀推進馬群模擬，畫出其他 17 頭的色球，並把玩家那一頭的位置寫進共用的 ref，
+ * 馬群的來源：模擬（每場換一組隨機出走馬）或レース再現（依公布成績重播，每次重播同一場）。
+ * create(round) 建立第 round 場的初始狀態；step(state, dt) 推進比賽時間 dt 秒。
+ */
+function simulationSource(course) {
+  return { create: (round) => createField({ seed: round + 1 }), step: (state, dt) => stepField(state, dt, course) }
+}
+
+function replaySource(replay) {
+  return { create: () => replay.at(0), step: (state, dt) => replay.at(Math.min(state.time + dt, replay.duration + 1)) }
+}
+
+/**
+ * 多頭數比賽：每幀推進馬群，畫出其他馬的色球，並把玩家那一頭的位置寫進共用的 ref，
  * 讓 Runner（VRM 角色）、跟隨鏡頭、太陽讀取。必須排在 Runner 之前。
  */
 export default function Field({
@@ -26,54 +38,57 @@ export default function Field({
   playing,
   speedMultiplier,
   playerNumber,
+  replay,
   traveledRef,
   lateralRef,
   playerMovingRef,
   rankingStore,
 }) {
-  const course = useMemo(() => ({ length: run.path.length, curvatureAt: run.curvatureAt }), [run])
-  const seedRef = useRef(1)
+  const source = useMemo(
+    () => (replay ? replaySource(replay) : simulationSource({ length: run.path.length, curvatureAt: run.curvatureAt })),
+    [replay, run],
+  )
+  const initial = useMemo(() => source.create(0), [source])
+  const roundRef = useRef(0)
   const fieldRef = useRef(null)
   const holdRef = useRef(0)
   const publishRef = useRef(0)
   const ballsRef = useRef(null)
 
-  // 換跑法或換馬番時重新開跑（同一個種子，同一場比賽）
+  // 換跑法、換比賽或換馬番時重新開跑
   useEffect(() => {
-    fieldRef.current = createField({ seed: seedRef.current })
+    fieldRef.current = source.create(roundRef.current)
     holdRef.current = 0
-  }, [course, playerNumber])
+  }, [source, playerNumber])
 
-  // 球的顏色依枠番；玩家那一格不畫球（由 VRM 角色代表）
+  // 球的顏色依枠番；玩家那一頭不畫球（由 VRM 角色代表）
   useLayoutEffect(() => {
     const balls = ballsRef.current
-    createField({ seed: 1 }).runners.forEach((runner, k) => {
-      balls.setColorAt(k, color.set(WAKU_COLORS[runner.waku - 1]))
-    })
+    initial.runners.forEach((runner, k) => balls.setColorAt(k, color.set(WAKU_COLORS[runner.waku - 1])))
     balls.instanceColor.needsUpdate = true
-  }, [])
+  }, [initial])
 
   useFrame((_, delta) => {
     if (!fieldRef.current) return
     const dt = Math.min(delta, MAX_FRAME_DELTA)
     let field = fieldRef.current
-    if (playing) field = stepField(field, dt * speedMultiplier, course)
+    if (playing) field = source.step(field, dt * speedMultiplier)
     if (field.finishOrder.length === field.runners.length) {
       holdRef.current += dt
       if (holdRef.current >= FINISH_HOLD) {
-        seedRef.current += 1 // 下一場換一組出走馬的跑法與能力
-        field = createField({ seed: seedRef.current })
+        roundRef.current += 1 // 模擬：下一場換一組出走馬；再現：重播同一場
+        field = source.create(roundRef.current)
         holdRef.current = 0
       }
     }
     fieldRef.current = field
 
-    const player = field.runners[playerNumber - 1]
+    const player = field.runners.find((runner) => runner.number === playerNumber) ?? field.runners[0]
     traveledRef.current = player.traveled
     lateralRef.current = player.lateral
     playerMovingRef.current = playing && player.speed > MOVING_SPEED
 
-    placeBalls(ballsRef.current, field, run, exaggeration, playerNumber)
+    placeBalls(ballsRef.current, field, run, exaggeration, player.number)
 
     publishRef.current += dt
     if (publishRef.current >= PUBLISH_INTERVAL) {
@@ -82,7 +97,15 @@ export default function Field({
     }
   })
 
-  return <instancedMesh ref={ballsRef} args={[BALL_GEOMETRY, BALL_MATERIAL, FIELD.runners]} castShadow frustumCulled={false} />
+  return (
+    <instancedMesh
+      key={initial.runners.length}
+      ref={ballsRef}
+      args={[BALL_GEOMETRY, BALL_MATERIAL, initial.runners.length]}
+      castShadow
+      frustumCulled={false}
+    />
+  )
 }
 
 function placeBalls(balls, field, run, exaggeration, playerNumber) {

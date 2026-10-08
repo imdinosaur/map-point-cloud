@@ -3,6 +3,8 @@ import { Canvas } from '@react-three/fiber'
 import { Environment, Lightformer, OrbitControls, Sky } from '@react-three/drei'
 import { TURF_COURSES } from './course/courseData'
 import { createCourseModel, isValidRunId } from './course/courseModel'
+import { raceById } from './course/races'
+import { buildReplay, findCornerDistances } from './course/replay'
 import Landmarks from './scene/Landmarks'
 import RaceGuide from './scene/RaceGuide'
 import Field from './scene/Field'
@@ -29,16 +31,24 @@ const SUN_SKY_POSITION = SUN_DIRECTION.clone().multiplyScalar(1000).toArray()
 // 初始視角：拉遠到能同時看到整圈與右側引込線，並避開左上控制面板
 const CAMERA_TARGET = [-20, 0, 50]
 
-/** 跑法存在網址 ?run= 以便分享 */
-function readRunIdFromUrl() {
-  const id = new URLSearchParams(window.location.search).get('run')
-  return isValidRunId(id) ? id : 'lap'
+/**
+ * 目前選擇的跑法與レース再現存在網址以便分享：?run=turf-2400 或 ?replay=jc2023（再現時跑法由比賽資料決定）。
+ * @returns {{ runId: string, replayId: string | null }}
+ */
+function readSelectionFromUrl() {
+  const params = new URLSearchParams(window.location.search)
+  const race = raceById(params.get('replay'))
+  if (race) return { runId: race.runId, replayId: race.id }
+  const id = params.get('run')
+  return { runId: isValidRunId(id) ? id : 'lap', replayId: null }
 }
 
-function writeRunIdToUrl(id) {
+function writeSelectionToUrl({ runId, replayId }) {
   const url = new URL(window.location.href)
-  if (id === 'lap') url.searchParams.delete('run')
-  else url.searchParams.set('run', id)
+  url.searchParams.delete('run')
+  url.searchParams.delete('replay')
+  if (replayId) url.searchParams.set('replay', replayId)
+  else if (runId !== 'lap') url.searchParams.set('run', runId)
   window.history.replaceState(null, '', url)
 }
 
@@ -47,7 +57,7 @@ export default function App() {
   const [exaggeration, setExaggeration] = useState(EXAGGERATION.initial)
   const [playing, setPlaying] = useState(true)
   const [speedMultiplier, setSpeedMultiplier] = useState(5)
-  const [runId, setRunId] = useState(readRunIdFromUrl)
+  const [selection, setSelection] = useState(readSelectionFromUrl)
   const [viewMode, setViewMode] = useState('overview')
   const [playerNumber, setPlayerNumber] = useState(1)
   // 玩家跑者的位置：連續繞圈時由 Runner 自己推進，比賽時由 Field 的馬群模擬寫入
@@ -62,12 +72,24 @@ export default function App() {
 
   const railShift = TURF_COURSES[course].railShift
   const base = LOWEST_ELEVATION * exaggeration - 1
+  const { runId, replayId } = selection
   const run = useMemo(() => MODEL.createRun(runId, railShift), [runId, railShift])
+  // レース再現：由公布的成績算出每頭馬的軌跡；コーナー位置由這條跑法的彎道決定
+  const replay = useMemo(() => {
+    const race = raceById(replayId)
+    if (!race) return null
+    return buildReplay(race, { length: run.path.length, cornerDistances: findCornerDistances(run.curvatureAt, run.path.length) })
+  }, [replayId, run])
 
-  const handleRunChange = useCallback((id) => {
-    setRunId(id)
-    writeRunIdToUrl(id)
+  const changeSelection = useCallback((next) => {
+    setSelection(next)
+    writeSelectionToUrl(next)
   }, [])
+  const handleRunChange = useCallback((id) => changeSelection({ runId: id, replayId: null }), [changeSelection])
+  const handleReplayChange = useCallback(
+    (id) => changeSelection({ runId: raceById(id).runId, replayId: id }),
+    [changeSelection],
+  )
 
   // 每幀由 Runner 呼叫，直接寫 DOM 以免整個 App 重新渲染
   const handleProgress = useCallback(
@@ -115,6 +137,7 @@ export default function App() {
             playing={playing}
             speedMultiplier={speedMultiplier}
             playerNumber={playerNumber}
+            replay={replay}
             traveledRef={traveledRef}
             lateralRef={lateralRef}
             playerMovingRef={playerMovingRef}
@@ -159,6 +182,8 @@ export default function App() {
         onCourseChange={setCourse}
         runId={runId}
         onRunChange={handleRunChange}
+        replayId={replayId}
+        onReplayChange={handleReplayChange}
         surface={run.surface}
         modelLengths={MODEL_LENGTHS}
         exaggeration={exaggeration}
