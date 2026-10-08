@@ -1,14 +1,12 @@
 import { useSyncExternalStore } from 'react'
 import { FIELD } from '../course/field'
-import { WAKU_COLORS, wakuOf } from '../course/startingGate'
+import { WAKU_COLORS, WAKU_TEXT_COLORS, wakuOf } from '../course/startingGate'
 
 const SHOWN_LEADERS = 5
-// 枠色上的數字顏色（依 JRA 出馬表：白、黃、橙、桃底用黑字）
-const DARK_TEXT_WAKU = new Set([1, 5, 7, 8])
 
 const chipColors = (number, count) => {
   const waku = wakuOf(number, count)
-  return { background: WAKU_COLORS[waku - 1], color: DARK_TEXT_WAKU.has(waku) ? '#1d2a1f' : '#fff' }
+  return { background: WAKU_COLORS[waku - 1], color: WAKU_TEXT_COLORS[waku - 1] }
 }
 
 /**

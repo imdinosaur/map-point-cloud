@@ -17,6 +17,7 @@ import { COLORS } from './scene/sceneConfig'
 import { useSurfaceMaterials } from './scene/useSurfaceMaterials'
 import { chartX, chartY } from './ui/chartScale'
 import ControlPanel from './ui/ControlPanel'
+import PositionTracker from './ui/PositionTracker'
 import { EXAGGERATION } from './ui/exaggerationScale'
 import { createRankingStore } from './ui/rankingStore'
 
@@ -65,6 +66,7 @@ export default function App() {
   const lateralRef = useRef(0)
   const playerMovingRef = useRef(false)
   const rankingStore = useMemo(() => createRankingStore(), [])
+  const trackerRef = useRef(null) // 位置追蹤條的每幀更新函式，由 PositionTracker 註冊、Field 呼叫
   const surfaceMaterials = useSurfaceMaterials()
   const remainingRef = useRef(null)
   const elevationRef = useRef(null)
@@ -138,6 +140,7 @@ export default function App() {
             speedMultiplier={speedMultiplier}
             playerNumber={playerNumber}
             replay={replay}
+            trackerRef={trackerRef}
             traveledRef={traveledRef}
             lateralRef={lateralRef}
             playerMovingRef={playerMovingRef}
@@ -172,6 +175,9 @@ export default function App() {
           <OrbitControls makeDefault target={CAMERA_TARGET} maxPolarAngle={Math.PI / 2.1} minDistance={40} maxDistance={2500} />
         )}
       </Canvas>
+
+      {/* 追跡、騎手目線時顯示轉播式位置追蹤 */}
+      <PositionTracker trackerRef={trackerRef} visible={!run.isLap && viewMode !== 'overview'} />
 
       <ControlPanel
         isRace={!run.isLap}
