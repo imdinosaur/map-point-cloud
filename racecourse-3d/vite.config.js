@@ -6,14 +6,16 @@ import react from '@vitejs/plugin-react'
 const OUT_DIR = '../dist/racecourse-3d'
 
 /**
- * 角色模型（public/models/*.vrm）版權屬原作者，只供本機開發使用。
+ * 角色模型（public/models/*.vrm）版權屬原作者、Mixamo 動作檔（public/animations/*.fbx）不可單獨散布，只供本機開發使用。
  * Vite 會把 public/ 整個複製進建置結果，deploy 時就會被公開，所以建置完成後移除。
  */
 const excludeLocalModels = () => ({
   name: 'exclude-local-models',
   apply: 'build',
   closeBundle() {
-    rmSync(fileURLToPath(new URL(`${OUT_DIR}/models`, import.meta.url)), { recursive: true, force: true })
+    for (const dir of ['models', 'animations']) {
+      rmSync(fileURLToPath(new URL(`${OUT_DIR}/${dir}`, import.meta.url)), { recursive: true, force: true })
+    }
   },
 })
 

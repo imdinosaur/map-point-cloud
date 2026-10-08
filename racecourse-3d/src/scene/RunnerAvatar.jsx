@@ -5,8 +5,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
 import { WIND, applyExternalForces, setupAvatarPhysics, swayRateFor, windGainFor } from './avatarPhysics'
 import { createInertiaTracker } from './inertia'
+import { createRunAnimator } from './runAnimator'
 import { RUN_BONES, cadenceFor, runPose, standPose, toVrm0 } from './runCycle'
 import { MAX_FRAME_DELTA } from './sceneConfig'
+import useRunClips from './useRunClips'
 
 const MODEL_URL = `${import.meta.env.BASE_URL}models/runner.vrm`
 const BOB_HEIGHT = 0.06 // 每步上下起伏（模型原尺寸，公尺）
@@ -79,7 +81,8 @@ function applyForces(vrm, group, { windUnit, windGain, tracker, dt, timeScale, s
 }
 
 /**
- * 以程序式跑步動作驅動的 VRM 角色。需包在 <Suspense> 內。
+ * VRM 跑者。需包在 <Suspense> 內。
+ * 有 Mixamo 跑步動作（public/animations/*.fbx）時用動作檔，否則用程序式動作。
  * movingRef.current 為 false 時（暫停、終點停留）停在原地站立。
  */
 export default function RunnerAvatar({ scale, speedMultiplier, movingRef }) {
@@ -89,6 +92,10 @@ export default function RunnerAvatar({ scale, speedMultiplier, movingRef }) {
   const windGainRef = useRef(0)
   const swayTimeRef = useRef(0)
   const tracker = useMemo(() => createInertiaTracker(), [])
+  const clips = useRunClips(vrm)
+  const animator = useMemo(() => clips && createRunAnimator(vrm, clips), [vrm, clips])
+
+  useEffect(() => () => animator?.dispose(), [animator])
 
   useEffect(() => {
     prepare(vrm, scale)
@@ -97,8 +104,13 @@ export default function RunnerAvatar({ scale, speedMultiplier, movingRef }) {
 
   useFrame((_, delta) => {
     const moving = movingRef.current
-    if (moving) phaseRef.current = (phaseRef.current + delta * cadenceFor(speedMultiplier) * TWO_PI) % TWO_PI
-    applyPose(vrm, phaseRef.current, moving)
+    if (animator) {
+      animator.update(delta, { moving, speedMultiplier })
+      vrm.scene.position.y = 0 // 上下起伏已在動作的 hips 位移裡
+    } else {
+      if (moving) phaseRef.current = (phaseRef.current + delta * cadenceFor(speedMultiplier) * TWO_PI) % TWO_PI
+      applyPose(vrm, phaseRef.current, moving)
+    }
 
     const targetGain = moving ? windGainFor(speedMultiplier) : 0
     windGainRef.current += (targetGain - windGainRef.current) * (1 - Math.exp(-WIND_EASE * delta))

@@ -25,3 +25,5 @@ dist-ssr
 
 # 角色模型僅供本機使用（版權屬原作者，不可公開散布）
 racecourse-3d/public/models/*.vrm
+# Mixamo 動作檔只供本機使用（授權不允許單獨散布原始檔）
+racecourse-3d/public/animations/*.fbx
